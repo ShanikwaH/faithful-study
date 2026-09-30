@@ -112,6 +112,15 @@ Go to **Decks → New blank deck** (or **••• → Edit questions**), then *
 All deck files, including the D550 deck and the Bible source decks, live in a **private** repository, `ShanikwaH/faithful-study-decks`, never in this public one. On your computer it's cloned inside this folder at `decks\`. To use a deck, go to **Import → drop area** and choose the file from `C:\GitHub\faithful-study\decks`.
 To set it up on a new computer: `gh repo clone ShanikwaH/faithful-study-decks C:\GitHub\faithful-study\decks`
 
+### G. One-tap import link (best for phones)
+Turn any deck into a link that imports with one tap, with no file to download:
+```powershell
+cd C:\GitHub\faithful-study
+python tools\make-import-link.py decks\d550-ethics-scenario-exam.json > link.txt
+```
+Open the link on your phone (text or email it to yourself, or save it in Notes) and the deck imports. The deck rides in the part of the link after `#`, which browsers never send to any server, so it stays private. But anyone you give the link to gets the deck, so share it only with people you'd hand the file to. If you tap it again, the app asks before making a duplicate. It needs iOS 16.4+, or a current Chrome, Edge, or Firefox. On anything older, use **Import → paste box**.
+For the Bible edition, add its address: `python tools\make-import-link.py deck.json https://shanikwah.github.io/bible-stories/`
+
 ---
 
 ## Study modes

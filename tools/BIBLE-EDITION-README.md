@@ -24,6 +24,8 @@ This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and
 
 The 60 starter questions load automatically the first time you open the app. If you ever need them again, tap **Load the 60 starter Bible stories**.
 
+**Deck files:** the separate deck files (and any new or paid decks) are kept in a private repository, `ShanikwaH/bible-stories-decks`, cloned locally at `C:\GitHub\bible-stories\decks`. This repository's `.gitignore` keeps that folder out of the public app.
+
 ---
 
 ## How to open it
@@ -81,6 +83,6 @@ Mark the right answer with `*`, or add a line such as `Answer: B`. You can also 
 
 - The app and all 60 starter questions are original works by AnalyticsByShanikwa. Quotations are from the King James Version, which is in the public domain in the United States.
 - If you add questions quoting modern translations (NIV, ESV, NLT, and others), follow each publisher's quotation limits. Or stick with KJV, or use references only.
-- To make a branded copy for a church or client, edit the `BRAND` block near the top of `index.html`. Or, from the main Faithful Study folder, run `python3 tools/build-bible-edition.py` to rebuild this edition from the shared source.
+- To make a branded copy for a church or client, edit the `BRAND` block near the top of `index.html`. Or, from the main Faithful Study folder, run `python3 tools/build-bible-edition.py` to rebuild this edition from the shared source. The script updates files in place and never touches `decks\`.
 
 *No accounts, no tracking. Nothing leaves your device except material you choose to send to an AI in AI Builder.*

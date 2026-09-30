@@ -200,7 +200,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.1.0",
+  version: "1.2.0",
   // Wording that changes per edition
   examLabel: "Timed exam",
   correctMsg: "Correct!",
@@ -853,6 +853,27 @@ function bindDrop(el) {
 }
 function pickFiles(accept, cb) { const inp = $("#hiddenFile"); inp.value = ""; inp.accept = accept || ""; inp.onchange = () => cb([...inp.files]); inp.click(); }
 
+/* ============ ONE-TAP IMPORT LINKS ============ */
+// Link format: https://…/index.html#import=<base64url of gzip(deck JSON)>
+// Everything after "#" stays on the device (browsers never send it to the server), so a
+// private deck can travel inside the link itself without being published anywhere.
+async function importFromLink(payload) {
+  history.replaceState(null, "", location.pathname + location.search);   // clear the link so a refresh won't re-import
+  try {
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/"), bin = atob(b64 + "===".slice((b64.length + 3) % 4));
+    const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+    let text;
+    if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      if (typeof DecompressionStream === "undefined") throw new Error("this browser is too old to open import links. Update it, or use Import → paste instead");
+      text = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    } else text = new TextDecoder().decode(bytes);
+    const decks = parseAny(text, "Shared deck.json");
+    const dupes = decks.filter(d => S.decks.some(x => x.title === d.title && x.questions.length === d.questions.length));
+    if (dupes.length && !(await confirmBox("Already imported", `“${esc(dupes[0].title)}” is already in your decks. Import another copy?`, "Import again"))) { toast("Kept your existing deck."); render(); return; }
+    await importDecks(decks, "link");
+  } catch (e) { toast("Couldn’t import that link: " + e.message, true, 8000); }
+}
+
 /* ============ SAMPLE DECK ============ */
 const SAMPLE = {format: "studyquiz/v1", deck: {title: "Sample: How Faithful Study Works", course: "Getting started", description: "A short tour of the app plus a few accounting-ethics scenarios.", sources: ["Faithful Study user guide"]},
   questions: [
@@ -1221,7 +1242,10 @@ window.addEventListener("beforeunload", e => { if (S.session && S.session.mode =
   const ok = await DB.open(); await loadAll(); S.runtimeKey = S.settings.apiKey; applyBrand(); updateNet(); render();
   if (!ok) toast("This browser blocked storage here, so data will be lost when you close this tab. Use Export backup, or install the hosted version.", true, 9000);
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
-  if (!S.decks.length && (location.hash === "#sample" || (BRAND.autoSeed && !(await DB.get("kv", "seeded"))))) { await DB.put("kv", {id: "seeded", at: Date.now()}); actions["load-sample"](); }
+  if (location.hash.startsWith("#import=")) { await importFromLink(location.hash.slice(8)); }
+  else if (!S.decks.length && (location.hash === "#sample" || (BRAND.autoSeed && !(await DB.get("kv", "seeded"))))) { await DB.put("kv", {id: "seeded", at: Date.now()}); actions["load-sample"](); }
+  // A link tapped while the app is already open only changes the #fragment (no reload), so listen for it too.
+  window.addEventListener("hashchange", () => { if (location.hash.startsWith("#import=")) importFromLink(location.hash.slice(8)); });
 })();
 </script>
 </body>
