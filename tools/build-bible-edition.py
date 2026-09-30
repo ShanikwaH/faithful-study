@@ -59,13 +59,15 @@ html = rep(html, "font:16px/1.55 var(--font)", "font:17px/1.6 var(--font)")   # 
 
 # ---------- BRAND block ----------
 old_brand = html[html.index("const BRAND = {"): html.index("};", html.index("const BRAND = {")) + 2]
+import re as _re
+BASE_VERSION = _re.search(r'version: "([^"]+)"', old_brand).group(1)   # keep both editions on the same version
 new_brand = '''const BRAND = {
   name: "Bible Stories for All Ages",
   tagline: "Thy word have I hid in mine heart. (Psalm 119:11)",
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.1.0",
+  version: "__BASE_VERSION__",
   examLabel: "Timed challenge",
   correctMsg: "Great job! 🎉",
   courseWord: "Group",
@@ -77,7 +79,7 @@ new_brand = '''const BRAND = {
   autoSeed: true,
   sampleButton: "Load the 60 starter Bible stories"
 };'''
-html = html.replace(old_brand, new_brand)
+html = html.replace(old_brand, new_brand.replace("__BASE_VERSION__", BASE_VERSION))
 
 # ---------- wording ----------
 html = rep(html, "Study any course offline with practice mode, timed exams, flashcards, and weak-spot review.",
