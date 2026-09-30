@@ -1,0 +1,23 @@
+You are an expert exam writer. Using ONLY the attached course materials (slides, PDFs, notes, transcripts, spreadsheets, images) plus well-established primary authorities for the subject, write [NUMBER] scenario-based multiple-choice practice questions for [COURSE NAME].
+
+If a pre-assessment or practice-test report is attached, put about 60% of the questions on the concepts I missed. Use new scenarios; don't copy the report's questions.
+
+Rules:
+- Each question opens with a realistic 2–5 sentence scenario and ends with one clear question.
+- Give 4 choices (a–d) with exactly one best answer, unless you mark it multi-select with "answers".
+- Make the wrong answers plausible: draw them from the same family of rules or concepts.
+- Spread correct answers evenly across a, b, c, and d.
+- "explanation": 2–5 sentences on why the right answer is right and why the others are wrong.
+- "sources": cite the course material location (for example "Textbook Ch. 4, slide 39" or "Notes p. 2") AND the primary authority (standard, statute, regulation, case, or official publication). Never invent a citation. If unsure of a paragraph number, cite at the section level.
+- "topic": the chapter or unit name. Add "tags": ["weak-spot"] to questions that target my misses.
+
+Return ONLY valid JSON (no commentary) in exactly this format:
+{
+  "format": "studyquiz/v1",
+  "deck": {"title": "[COURSE NAME] Practice Exam", "course": "[COURSE CODE]", "description": "", "sources": ["list the materials used"]},
+  "questions": [
+    {"id": "q1", "topic": "Chapter 3", "prompt": "Scenario... Question?",
+     "options": [{"id":"a","text":"..."},{"id":"b","text":"..."},{"id":"c","text":"..."},{"id":"d","text":"..."}],
+     "answer": "b", "explanation": "...", "sources": ["...", "..."], "hint": "optional", "tags": []}
+  ]
+}
