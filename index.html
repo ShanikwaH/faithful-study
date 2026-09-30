@@ -200,7 +200,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.2.1",
+  version: "1.2.2",
   // Wording that changes per edition
   examLabel: "Timed exam",
   correctMsg: "Correct!",
@@ -1256,7 +1256,18 @@ window.addEventListener("beforeunload", e => { if (S.session && S.session.mode =
 (async function boot() {
   const ok = await DB.open(); await loadAll(); S.runtimeKey = S.settings.apiKey; applyBrand(); updateNet(); render();
   if (!ok) toast("This browser blocked storage here, so data will be lost when you close this tab. Use Export backup, or install the hosted version.", true, 9000);
-  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    const hadController = !!navigator.serviceWorker.controller; let reloading = false;
+    navigator.serviceWorker.register("sw.js").then(reg => {
+      // Home Screen apps can stay open in the background for days: check for a new version whenever the app comes back to the front.
+      document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloading) return;                     // first install: nothing to refresh
+      if (S.session && !S.session.ended) { toast("An update is ready. It will load the next time you open the app.", false, 6000); return; }
+      reloading = true; location.reload();                          // not mid-quiz: switch to the new version now
+    });
+  }
   if (location.hash.startsWith("#import=")) { await importFromLink(location.hash.slice(8)); }
   else if (!S.decks.length && (location.hash === "#sample" || (BRAND.autoSeed && !(await DB.get("kv", "seeded"))))) { await DB.put("kv", {id: "seeded", at: Date.now()}); actions["load-sample"](); }
   // A link tapped while the app is already open only changes the #fragment (no reload), so listen for it too.
