@@ -200,7 +200,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.2.0",
+  version: "1.2.1",
   // Wording that changes per edition
   examLabel: "Timed exam",
   correctMsg: "Correct!",
@@ -802,7 +802,7 @@ function renderImport() {
       <strong>Drop quiz files here or tap to choose</strong>
       <p class="muted" style="margin:6px 0 0">.json (from any AI or this app) · .csv / .tsv (Excel, Google Sheets) · .txt / .md (simple text format)</p>
     </div>
-    <div class="field"><label for="pasteBox">…or paste here: an AI's JSON reply, CSV rows, or plain-text questions</label>
+    <div class="field"><label for="pasteBox">…or paste here: a deck link, an AI's JSON reply, CSV rows, or plain-text questions</label>
       <textarea id="pasteBox" placeholder="Q: A CPA discovers an error in a prior-year return. What should the CPA do first?
 A) File an amended return
 *B) Advise the client of the error and its consequences
@@ -811,7 +811,7 @@ D) Do nothing
 Explanation: Circular 230 §10.21 requires advising the client.
 Source: 31 C.F.R. §10.21
 Topic: Tax ethics"></textarea></div>
-    <div class="row"><button class="btn primary" data-act="import-paste">Import pasted text</button><button class="btn" data-act="load-sample">${esc(BRAND.sampleButton)}</button></div>
+    <div class="row"><button class="btn primary" data-act="import-clipboard">📋 Paste &amp; import</button><button class="btn" data-act="import-paste">Import pasted text</button><button class="btn" data-act="load-sample">${esc(BRAND.sampleButton)}</button></div>
   </div>
   <div class="card" style="margin-top:14px">
     <h2>Make a quiz with any AI (Claude, ChatGPT, Gemini, Copilot…)</h2>
@@ -851,15 +851,17 @@ function bindDrop(el) {
   el.addEventListener("drop", e => { const fs = [...e.dataTransfer.files]; if (!fs.length) return; kind === "library" ? addLibraryFiles(fs) : kind === "ai" ? addAIFiles(fs) : handleImportFiles(fs); });
   el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); } });
 }
+const isTouch = matchMedia("(pointer: coarse)").matches || /iPhone|iPad|Android/i.test(navigator.userAgent);
 function pickFiles(accept, cb) { const inp = $("#hiddenFile"); inp.value = ""; inp.accept = accept || ""; inp.onchange = () => cb([...inp.files]); inp.click(); }
 
 /* ============ ONE-TAP IMPORT LINKS ============ */
 // Link format: https://…/index.html#import=<base64url of gzip(deck JSON)>
 // Everything after "#" stays on the device (browsers never send it to the server), so a
 // private deck can travel inside the link itself without being published anywhere.
-async function importFromLink(payload) {
-  history.replaceState(null, "", location.pathname + location.search);   // clear the link so a refresh won't re-import
+async function importFromLink(payload, fromAddressBar = true) {
+  if (fromAddressBar) history.replaceState(null, "", location.pathname + location.search);   // clear the link so a refresh won't re-import
   try {
+    payload = decodeURIComponent(String(payload)).replace(/[^A-Za-z0-9_\-+/=]/g, "");
     const b64 = payload.replace(/-/g, "+").replace(/_/g, "/"), bin = atob(b64 + "===".slice((b64.length + 3) % 4));
     const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
     let text;
@@ -871,7 +873,15 @@ async function importFromLink(payload) {
     const dupes = decks.filter(d => S.decks.some(x => x.title === d.title && x.questions.length === d.questions.length));
     if (dupes.length && !(await confirmBox("Already imported", `“${esc(dupes[0].title)}” is already in your decks. Import another copy?`, "Import again"))) { toast("Kept your existing deck."); render(); return; }
     await importDecks(decks, "link");
-  } catch (e) { toast("Couldn’t import that link: " + e.message, true, 8000); }
+    if (!fromAddressBar) { const pb = $("#pasteBox"); if (pb) pb.value = ""; }
+  } catch (e) { const cut = /atob|decod|JSON|gzip|incorrect|invalid/i.test(e.message); toast(cut ? "That link looks incomplete, so part of it was probably cut off when it was copied. Copy the whole link again and paste it." : "Couldn’t import that link: " + e.message, true, 9000); }
+}
+// Pasted text may be a whole import link (…#import=…). Home Screen apps keep their own storage, so pasting is how a link reaches them.
+const linkPayload = t => { const m = String(t).match(/#import=([A-Za-z0-9_\-%+/=\s]+)/); return m ? m[1].replace(/\s+/g, "") : null; };
+async function importPastedText(t) {
+  if (!t || !t.trim()) { toast("Nothing to import. Copy a deck link or deck text first.", true); return; }
+  const lp = linkPayload(t); if (lp) return importFromLink(lp, false);
+  try { await importDecks(parseAny(t, ""), "pasted text"); } catch (e) { toast(e.message, true, 7000); }
 }
 
 /* ============ SAMPLE DECK ============ */
@@ -1188,8 +1198,13 @@ const actions = {
   "dup-deck": async ds => { const d = S.decks.find(x => x.id === ds.id); const c = JSON.parse(JSON.stringify(d)); c.id = uid("deck"); c.title += " (copy)"; await saveDeck(c); render(); toast("Deck duplicated."); },
   "reset-prog": async ds => { if (await confirmBox("Reset progress?", "Clears mastery, weak spots, and history for this deck. The questions stay.", "Reset", true)) { S.progress[ds.id] = {id: ds.id, q: {}, attempts: []}; await saveProg(ds.id); render(); } },
   "del-deck": async ds => { const d = S.decks.find(x => x.id === ds.id); if (await confirmBox("Delete deck?", `“${esc(d.title)}” and its progress will be permanently deleted. Export it first if you might want it later.`, "Delete", true)) { await DB.del("decks", d.id); await DB.del("progress", d.id); S.decks = S.decks.filter(x => x.id !== d.id); delete S.progress[d.id]; render(); toast("Deck deleted."); } },
-  "pick-import": () => pickFiles(".json,.csv,.tsv,.txt,.md,application/json,text/*", handleImportFiles),
-  "import-paste": async () => { const t = $("#pasteBox").value; if (!t.trim()) { toast("Paste something first.", true); return; } try { await importDecks(parseAny(t, ""), "pasted text"); } catch (e) { toast(e.message, true, 7000); } },
+  "pick-import": () => pickFiles(isTouch ? "" : ".json,.csv,.tsv,.txt,.md,application/json,text/*", handleImportFiles),
+  "import-paste": async () => importPastedText($("#pasteBox").value),
+  "import-clipboard": async () => {
+    let t = "";
+    try { t = await navigator.clipboard.readText(); } catch (e) { toast("Your browser didn’t allow reading the clipboard. Long-press the box above, tap Paste, then tap Import pasted text.", true, 8000); $("#pasteBox")?.focus(); return; }
+    importPastedText(t);
+  },
   "copy-prompt": async () => { try { await navigator.clipboard.writeText(AI_PROMPT); toast("Prompt copied. Paste it into any AI with your files attached."); } catch (e) { download("ai-quiz-prompt.txt", AI_PROMPT, "text/plain"); } },
   "dl-prompt": () => download("ai-quiz-prompt.txt", AI_PROMPT, "text/plain"),
   "pick-lib": () => pickFiles("", addLibraryFiles),
@@ -1203,7 +1218,7 @@ const actions = {
   "ai-generate": (ds, el) => aiGenerate(el),
   "save-settings": async () => { const st = S.settings; st.secPerQ = Math.max(10, +$("#stSec").value || 90); st.passPct = Math.min(100, Math.max(1, +$("#stPass").value || 80)); st.theme = $("#stTheme").value; st.shuffleQ = $("#stShufQ").checked; st.shuffleOpts = $("#stShufO").checked; st.appName = $("#stName").value.trim(); st.tagline = $("#stTag").value.trim(); await saveSettings(); applyBrand(); toast("Settings saved."); },
   "backup": () => doBackup(),
-  "restore": () => pickFiles(".json,application/json", fs => fs[0] && doRestore(fs[0])),
+  "restore": () => pickFiles(isTouch ? "" : ".json,application/json", fs => fs[0] && doRestore(fs[0])),
   "wipe": async () => { if (await confirmBox("Erase everything?", "Deletes all decks, progress, library files, and settings on this device. Export a backup first if you might need anything.", "Erase all", true)) { for (const s of ["decks","progress","files","kv"]) await DB.clear(s); await loadAll(); applyBrand(); nav("decks"); toast("All data erased."); } },
   "install": async () => { if (S.deferredInstall) { S.deferredInstall.prompt(); await S.deferredInstall.userChoice; S.deferredInstall = null; render(); } }
 };
