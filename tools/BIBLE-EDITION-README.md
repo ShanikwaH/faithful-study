@@ -77,6 +77,8 @@ Hint: It is called the mountain of God.
 ```
 Mark the right answer with `*`, or add a line such as `Answer: B`. You can also use CSV from a spreadsheet, JSON from any AI, or the editor in the app (**••• → Edit questions**).
 
+**Deck links on a phone:** a deck link carries the whole deck. Copy the link, open the app from your Home Screen, go to **Import**, and tap **📋 Paste & import**. Don't just tap the link: a Home Screen app keeps its own storage, so tapping opens the deck in Safari or Chrome instead. To make a link from a deck file, run `python tools\make-import-link.py deck.json https://shanikwah.github.io/bible-stories/` from the Faithful Study folder. Needs app version 1.2.1+.
+
 ---
 
 ## Selling or sharing

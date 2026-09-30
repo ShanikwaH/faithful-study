@@ -112,13 +112,21 @@ Go to **Decks → New blank deck** (or **••• → Edit questions**), then *
 All deck files, including the D550 deck and the Bible source decks, live in a **private** repository, `ShanikwaH/faithful-study-decks`, never in this public one. On your computer it's cloned inside this folder at `decks\`. To use a deck, go to **Import → drop area** and choose the file from `C:\GitHub\faithful-study\decks`.
 To set it up on a new computer: `gh repo clone ShanikwaH/faithful-study-decks C:\GitHub\faithful-study\decks`
 
-### G. One-tap import link (best for phones)
-Turn any deck into a link that imports with one tap, with no file to download:
+### G. Deck links: copy and paste (best for phones)
+Turn any deck into a link that carries the whole deck, so there's no file to download:
 ```powershell
 cd C:\GitHub\faithful-study
 python tools\make-import-link.py decks\d550-ethics-scenario-exam.json > link.txt
 ```
-Open the link on your phone (text or email it to yourself, or save it in Notes) and the deck imports. The deck rides in the part of the link after `#`, which browsers never send to any server, so it stays private. But anyone you give the link to gets the deck, so share it only with people you'd hand the file to. If you tap it again, the app asks before making a duplicate. It needs iOS 16.4+, or a current Chrome, Edge, or Firefox. On anything older, use **Import → paste box**.
+**On a phone with the app on your Home Screen (recommended):**
+1. Copy the link. Long-press it and choose **Copy Link**, or use a **Copy link** button.
+2. Open the app from your Home Screen, go to **Import**, and tap **📋 Paste & import**. Tap **Allow Paste** if your phone asks.
+
+Pasting the link into the Import box and tapping **Import pasted text** also works.
+
+> **Why not just tap the link?** A Home Screen app keeps its own storage, separate from Safari, Chrome, and the in-app browsers of Claude, Mail, or Messages. Tapping a link opens the deck in that browser's copy of the app, not the one on your Home Screen. Tapping only works when you use the app in that same browser tab.
+
+The deck rides in the part of the link after `#`, which browsers never send to any server. But anyone you give the link to gets the deck, so share it only with people you'd hand the file to. Importing the same deck twice makes the app ask before adding a duplicate. It needs app version 1.2.1+, plus iOS 16.4+ or a current Chrome, Edge, or Firefox.
 For the Bible edition, add its address: `python tools\make-import-link.py deck.json https://shanikwah.github.io/bible-stories/`
 
 ---
