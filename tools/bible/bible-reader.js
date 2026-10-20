@@ -329,9 +329,10 @@
     return out;
   }
   // Verse-level split for short daily portions (New Testament every day): breaks at the paragraph nearest the target.
-  function splitVerses(fromB, toB, days) {
+  const range = (a, z) => Array.from({length: z - a}, (_, i) => a + i);
+  function splitVerses(bookList, days) {
     const vs = [];
-    for (let b = fromB; b < toB; b++) chapters(b).forEach((ch, ci) => ch.v.forEach((x, vi) => vs.push({b, c: ci + 1, v: vi + 1, br: vi === 0 || vPara(x)})));
+    for (const b of bookList) chapters(b).forEach((ch, ci) => ch.v.forEach((x, vi) => vs.push({b, c: ci + 1, v: vi + 1, br: vi === 0 || vPara(x)})));
     const cuts = [0];
     for (let d = 1; d < days; d++) {
       const t = Math.round(vs.length * d / days); let best = t;
@@ -348,9 +349,49 @@
   const BUILT_IN = [
     {id: "gen-rev", title: "Bible in a year: Genesis to Revelation", description: "The whole Bible in order, 3 to 4 chapters a day. Each day is about the same length.", make: () => splitChapters(allChapters(0, books().length), 365)},
     {id: "ot-nt", title: "Bible in a year: Old + New Testament daily", description: "Every day has an Old Testament reading (about 2 to 3 chapters) and a New Testament reading (about 20 verses).",
-      make: () => { const ot = splitChapters(allChapters(0, NT_START), 365), nt = splitVerses(NT_START, books().length, 365); return ot.map((d, i) => d.concat(nt[i])); }},
+      make: () => { const ot = splitChapters(allChapters(0, NT_START), 365), nt = splitVerses(range(NT_START, books().length), 365); return ot.map((d, i) => d.concat(nt[i])); }},
     {id: "nt-90", title: "New Testament in 90 days", description: "Matthew to Revelation, about 3 chapters a day. A good first plan.", make: () => splitChapters(allChapters(NT_START, books().length), 90)}
   ];
+  // Plan builder (the reading-plan-builder skill, inside the app): whole chapters when there are enough, otherwise verse portions.
+  function splitAuto(bookList, days) {
+    const chs = bookList.flatMap(b => chapters(b).map((ch, i) => ({b, c: i + 1, n: ch.v.length})));
+    return chs.length >= days ? splitChapters(chs, days) : splitVerses(bookList, days);
+  }
+  const SCOPES = {bible: ["The whole Bible", () => range(0, books().length)], ot: ["The Old Testament", () => range(0, NT_START)], nt: ["The New Testament", () => range(NT_START, books().length)],
+    gospels: ["The four Gospels", () => range(39, 43)], custom: ["Books I choose (from… to…)", null]};
+  const EXTRAS = {none: ["Nothing extra", []], nt: ["New Testament", null], ps: ["Psalms", [18]], pr: ["Proverbs", [19]], pspr: ["Psalms and Proverbs", [18, 19]]};
+  function buildPlan(o) {
+    const extra = o.extra === "nt" ? range(NT_START, books().length) : EXTRAS[o.extra][1];
+    let main = o.scope === "custom" ? range(Math.min(o.from, o.to), Math.max(o.from, o.to) + 1) : SCOPES[o.scope][1]();
+    main = main.filter(b => !extra.includes(b));
+    if (!main.length) throw new Error("Choose books to read, other than the daily extra.");
+    const days = Math.max(1, Math.min(1500, o.days | 0));
+    const mainChs = main.reduce((a, b) => a + chapters(b).length, 0);
+    if (days > main.reduce((a, b) => a + chapters(b).reduce((x, ch) => x + ch.v.length, 0), 0)) throw new Error("That's more days than there are verses to read. Choose fewer days.");
+    const A = splitAuto(main, days), B = extra.length ? splitAuto(extra, days) : null;
+    const name = o.scope === "custom" ? (main.length === 1 ? bookName(main[0]) : `${bookName(main[0])} to ${bookName(main[main.length - 1])}`) : SCOPES[o.scope][0].replace(/^The /, "").replace(/^./, c => c.toUpperCase());
+    const title = `${name}${B ? " + " + EXTRAS[o.extra][0] : ""} in ${days} days`;
+    const description = `${mainChs} chapters${B ? `, with ${EXTRAS[o.extra][0]} every day` : ""}. Made with the plan builder.`;
+    return {title, description, days: A.map((d, i) => (B ? d.concat(B[i]) : d).map(readingLabel))};
+  }
+  const PLAN_PROMPT = `You are building a Bible reading plan for the "Bible Stories for All Ages" app (reading-plan-builder skill).
+Plan: [DESCRIBE IT, e.g., "Psalms and Proverbs in 60 days" or "the life of David, 40 days, one passage a day"].
+Rules:
+- Balance the days by verse count so each day takes about the same time. Cover every chapter or passage exactly once, in order, with no empty days.
+- Use full English book names and only these reference forms: "Psalm 23", "Genesis 1-3", "John 3:16-21", "Matthew 2:19-3:17", "Jude". Numbered books as "1 Corinthians", "2 Kings". Use the King James Version book names (e.g., "Song of Solomon").
+- A day with more than one passage lists each passage separately.
+Return ONLY valid JSON, no commentary, in exactly this format:
+{"format": "readingplan/v1", "plan": {"title": "Short title (under 50 characters)", "description": "One sentence.", "days": [["Genesis 1-2", "Matthew 1"], ["Genesis 3-5"]]}}`;
+  function planMarkdown(id) {
+    const st = planStatus(id); if (!st) return "";
+    const start = parseDay(st.pr.start);
+    return `# ${st.P.title}\n\n${st.P.description}\n\nStart: ${fmtDay(start)} · ${st.n} days · King James Version\n\n` +
+      st.P.days.map((d, i) => `- [${st.pr.done[i] ? "x" : " "}] Day ${i + 1} (${fmtDay(new Date(start.getTime() + i * DAY_MS))}): ${dayLabel(d)}`).join("\n") + "\n";
+  }
+  function planJSON(id) {
+    const P = planDef(id); if (!P) return "";
+    return JSON.stringify({format: "readingplan/v1", plan: {title: P.title, description: P.description, days: P.days.map(d => d.map(readingLabel))}}, null, 1);
+  }
   const planCache = {};
   function planDef(id) {
     if (planCache[id]) return planCache[id];
@@ -410,7 +451,9 @@
         <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}" aria-label="Plan progress ${p}%"><i style="width:${p}%"></i></div>
         <p style="margin:10px 0">${st.finished ? "🎉 Plan complete. Well done, good and faithful reader!" : st.behind ? `You have <strong>${st.behind}</strong> day${st.behind > 1 ? "s" : ""} to catch up. Missed days stay open, so just keep going.` : "You're on track."}</p>
         <div class="row">${st.finished ? "" : `<button class="btn green" data-act="bpday" data-d="${st.next}">▶ Play day ${st.next + 1}</button>`}
-          <button class="btn sm" data-act="bpstart" data-id="${esc(id)}">Change start date</button></div>
+          <button class="btn sm" data-act="bpstart" data-id="${esc(id)}">Change start date</button>
+          <button class="btn sm" data-act="bpexport" data-f="md" aria-label="Save this plan as a checklist (Markdown)">⬇ Checklist</button>
+          <button class="btn sm" data-act="bpexport" data-f="json" aria-label="Save this plan as a plan file to share">⬇ Plan file</button></div>
         <ol class="bdays">${rows.join("")}</ol>
         <button class="btn sm ghost" data-act="bpall">${BR.planShowAll ? "Show fewer days" : `Show all ${st.n} days`}</button></div>`;
     }
@@ -420,6 +463,17 @@
       return `<div class="card"><h3 style="margin-top:0">${esc(x.title)}</h3><p class="muted" style="font-size:.9rem">${esc(x.description || "")}${x.custom ? ` (${x.n} days, imported)` : ""}</p>
         <div class="row"><button class="btn primary sm" data-act="${pr ? "bpswitch" : "bpstart"}" data-id="${esc(x.id)}">${pr ? `Continue (${dn} days read)` : "Start this plan"}</button>
         ${x.custom ? `<button class="btn sm ghost" data-act="bpdel" data-id="${esc(x.id)}">Remove</button>` : ""}</div></div>`; }).join("")}</div>
+      <div class="card" style="margin-top:14px"><h2 style="margin-top:0">🛠 Build your own plan</h2>
+        <form id="bpBuild">
+          <div class="field"><label for="bbScope">What to read</label><select id="bbScope">${Object.entries(SCOPES).map(([k, [l]]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+          <div class="row bbrange hide" id="bbRange"><div class="field" style="flex:1;min-width:130px"><label for="bbFrom">From</label><select id="bbFrom">${books().map((b, i) => `<option value="${i}">${esc(b.n)}</option>`).join("")}</select></div>
+            <div class="field" style="flex:1;min-width:130px"><label for="bbTo">To</label><select id="bbTo">${books().map((b, i) => `<option value="${i}" ${i === 18 ? "selected" : ""}>${esc(b.n)}</option>`).join("")}</select></div></div>
+          <div class="field"><label for="bbExtra">Also read every day</label><select id="bbExtra">${Object.entries(EXTRAS).map(([k, [l]]) => `<option value="${k}">${l}</option>`).join("")}</select></div>
+          <div class="field"><label for="bbDays">Number of days</label><input id="bbDays" type="number" min="1" max="1500" value="365" inputmode="numeric">
+            <div class="row" style="margin-top:6px">${[30, 90, 180, 365].map(n => `<button type="button" class="btn sm" data-act="bbdays" data-n="${n}">${n}</button>`).join("")}</div></div>
+          <p class="help" id="bbPreview"></p>
+          <button class="btn primary" type="submit">Create plan</button></form>
+        <p class="help" style="margin-top:12px">Want something else, like a topical or chronological plan? <button class="blink" data-act="bpprompt">Copy the AI prompt</button>, paste it into Claude, ChatGPT, or any AI with your idea, then import the result below.</p></div>
       <div class="card" style="margin-top:14px"><h2 style="margin-top:0">Import a plan</h2>
         <p class="muted" style="font-size:.9rem">Paste a <code>readingplan/v1</code> plan from the reading-plan skill or any AI, or a simple list with one day per line, such as <code>Genesis 1-3; Matthew 1</code>.</p>
         <label class="vh" for="bpText">Plan to import</label><textarea id="bpText" style="min-height:110px" placeholder='{"format":"readingplan/v1","plan":{"title":"Psalms in 30 days","days":[["Psalm 1-5"],["Psalm 6-10"]]}}'></textarea>
@@ -486,6 +540,10 @@
       startPlayback(start, "plan", {end: {b: cur.b, c: cur.c2, v: cur.v2}, queue: segs.slice(seg + 1), planId: id, planDay: i, seg});
     },
     bpimport: () => importPlan($("#bpText")?.value),
+    bbdays: d => { $("#bbDays").value = d.n; bbPreview(); },
+    bpprompt: async () => { try { await navigator.clipboard.writeText(PLAN_PROMPT); toast("Prompt copied. Paste it into any AI and describe your plan."); } catch (e) { download("reading-plan-prompt.txt", PLAN_PROMPT, "text/plain"); } },
+    bpexport: d => { const id = BR.plans.active, P = planDef(id); if (!P) return; const slugT = P.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      if (d.f === "md") download(slugT + ".md", planMarkdown(id), "text/markdown"); else download(slugT + ".readingplan.json", planJSON(id), "application/json"); },
     bpclip: async () => { let t = ""; try { t = await navigator.clipboard.readText(); } catch (e) { toast("Your browser didn't allow reading the clipboard. Long-press the box, tap Paste, then tap Import plan.", true, 8000); $("#bpText")?.focus(); return; } importPlan(t); },
     bbook: d => { BR.book = +d.b; BR.screen = chapters(+d.b).length === 1 ? "read" : "chapters"; BR.ch = 1; BR.sel = null; render(); window.scrollTo(0, 0); },
     bch: d => openChapter(BR.book, +d.c),
@@ -544,6 +602,23 @@
       if (BR.play.on && BR.play.pos) startPlayback(BR.play.pos, BR.play.scope, resumeOpts());   // apply new speed/voice/timer right away
       else updateBar();
     }
+  });
+  const bbOpts = () => ({scope: $("#bbScope").value, from: +$("#bbFrom").value, to: +$("#bbTo").value, extra: $("#bbExtra").value, days: +$("#bbDays").value});
+  function bbPreview() {
+    const el = $("#bbPreview"); if (!el) return;
+    $("#bbRange")?.classList.toggle("hide", $("#bbScope").value !== "custom");
+    try { const P = buildPlan(bbOpts()); el.textContent = `${P.title}. Day 1: ${P.days[0].join(" · ")}.`; } catch (e) { el.textContent = e.message; }
+  }
+  document.addEventListener("change", e => { if (/^bb(Scope|From|To|Extra)$/.test(e.target.id)) bbPreview(); });
+  document.addEventListener("input", e => { if (e.target.id === "bbDays") bbPreview(); });
+  EXTRA_AFTER.push(() => { if (S.view === "bible" && BR.screen === "plans") bbPreview(); });
+  document.addEventListener("submit", e => {
+    if (e.target.id !== "bpBuild") return;
+    e.preventDefault();
+    let P; try { P = buildPlan(bbOpts()); } catch (err) { toast(err.message, true, 6000); return; }
+    const id = "custom-" + Date.now().toString(36);
+    BR.plans.custom.push({id, title: P.title, description: P.description, days: P.days});
+    saveState(); toast(`Created “${P.title}”.`); actions.bpstart({id});
   });
   document.addEventListener("submit", e => {
     if (e.target.id !== "bibleGo") return;
@@ -609,6 +684,7 @@ body:has(.bplayer) #toast{bottom:calc(118px + env(safe-area-inset-bottom))}
 .bday.done .bcheck{background:var(--ok);border-color:var(--ok)}
 .bdaytxt{flex:1;min-width:0;font-size:.92rem}
 .blink{background:none;border:0;padding:2px 0;color:var(--accent);font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.bbrange{gap:10px}
 .bmlist{display:grid;gap:6px}
 .bmitem{display:flex;gap:6px;align-items:stretch}
 .bmgo{flex:1;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;min-width:0}

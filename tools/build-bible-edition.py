@@ -170,6 +170,8 @@ sw = rep(sw, 'const CACHE = "faithful-study-v', 'const CACHE = "bible-stories-v'
 sw = rep(sw, "/* Faithful Study service worker", "/* Bible Stories for All Ages service worker")
 sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", ')
 for f in ("bible-reader.js", "kjv.json"): shutil.copy(BASE / "tools" / "bible" / f, OUT / f)
+# the reading-plan-builder skill (for Claude or any AI) ships with the app so plans can be made outside it too
+shutil.copytree(BASE / "tools" / "bible" / "skills", OUT / "skills", dirs_exist_ok=True)
 (OUT / "sw.js").write_text(sw, encoding="utf-8")
 
 man = json.loads((BASE / "manifest.webmanifest").read_text(encoding="utf-8"))
