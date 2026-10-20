@@ -200,7 +200,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.2.3",
+  version: "1.2.4",
   // Wording that changes per edition
   examLabel: "Timed exam",
   correctMsg: "Correct!",
@@ -458,15 +458,18 @@ function topicStats(d) {
 const isCorrect = (q, sel) => sel && sel.length === q.answer.length && sel.every(a => q.answer.includes(a));
 
 /* ============ NAV & RENDER ============ */
+// Edition add-ons (e.g. the Bible reader in Bible Stories) register extra views and post-render hooks here.
+const EXTRA_VIEWS = {}, EXTRA_AFTER = [];
 function nav(view) { stopSpeak(); if (S.session && view !== "session" && !S.session.ended && S.session.mode === "exam") { toast("Finish or exit the exam first."); return; } stopTimer(); S.view = view; if (view !== "session") S.session = null; render(); window.scrollTo(0, 0); }
 function render() {
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.view === S.view ? "page" : "false"));
-  const v = {decks: renderDecks, library: renderLibrary, import: renderImport, ai: renderAI, settings: renderSettings, session: renderSession, results: renderResults, stats: renderStats, editor: renderEditor}[S.view] || renderDecks;
+  const v = {decks: renderDecks, library: renderLibrary, import: renderImport, ai: renderAI, settings: renderSettings, session: renderSession, results: renderResults, stats: renderStats, editor: renderEditor, ...EXTRA_VIEWS}[S.view] || renderDecks;
   Promise.resolve(v()).then(html => { if (typeof html === "string") $("#main").innerHTML = html; afterRender(); });
 }
 function afterRender() {
   const dz = $("#dropzone"); if (dz) bindDrop(dz);
   if (S.view === "session" && S.session?.mode === "exam") startTimer();
+  EXTRA_AFTER.forEach(f => { try { f(); } catch (e) { console.error(e); } });
 }
 function applyBrand() {
   const name = S.settings.appName || BRAND.name, tag = S.settings.tagline || BRAND.tagline;

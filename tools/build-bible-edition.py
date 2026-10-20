@@ -154,6 +154,11 @@ decks = [json.loads((DECKS / f).read_text(encoding="utf-8")) for f in
 s_start = html.index("const SAMPLE = {"); s_end = html.index("]};", s_start) + 3
 html = html[:s_start] + "const SAMPLE = " + json.dumps({"decks": decks}, ensure_ascii=False) + ";" + html[s_end:]
 
+# ---------- KJV Bible reader with read-aloud (Bible edition only) ----------
+html = rep(html, '<button data-act="nav" data-view="decks">Decks</button>',
+                 '<button data-act="nav" data-view="decks">Decks</button>\n    <button data-act="nav" data-view="bible">Bible</button>')
+html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></script>\n</body>\n</html>")
+
 # ---------- write output ----------
 # Update files in place. Never delete OUT: it's a git repository, and OUT/decks is a separate
 # private deck repository nested inside it. Deck files are NOT copied into the public app folder.
@@ -163,6 +168,8 @@ html = html[:s_start] + "const SAMPLE = " + json.dumps({"decks": decks}, ensure_
 sw = (BASE / "sw.js").read_text(encoding="utf-8")
 sw = rep(sw, 'const CACHE = "faithful-study-v', 'const CACHE = "bible-stories-v')
 sw = rep(sw, "/* Faithful Study service worker", "/* Bible Stories for All Ages service worker")
+sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", ')
+for f in ("bible-reader.js", "kjv.json"): shutil.copy(BASE / "tools" / "bible" / f, OUT / f)
 (OUT / "sw.js").write_text(sw, encoding="utf-8")
 
 man = json.loads((BASE / "manifest.webmanifest").read_text(encoding="utf-8"))

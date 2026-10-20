@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.1.0
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.2.4
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
@@ -8,6 +8,13 @@ This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and
 
 ## What's inside
 
+- **📖 The whole Holy Bible (King James Version) with an audio reader.** It's built into the app, so it works offline.
+  - Open the **Bible** tab. Tap any of the 66 books and a chapter, or type a passage such as `John 3:16`, `Psalm 23`, `Genesis 1-3`, `1 Cor 13:4-7`, or `John 3:36-4:2`.
+  - Press **▶ Play**. Your device's voice reads the passage aloud. The verse being read is highlighted, and the page scrolls along with it.
+  - **What to read:** use **⚙ Options** to choose this chapter, only the verses you searched for, to the end of the book, or the whole Bible from where you are. **Read the whole book aloud** is on every book's chapter list.
+  - **Your settings:** pick the reading speed, choose a voice, and set a sleep timer (15, 30, or 60 minutes, or the end of the chapter).
+  - **Find your place again:** tap any verse number to read from there, read just that verse, or bookmark it. **Continue** picks up where you stopped, and **★ Bookmarks** keeps your saved verses.
+  - **Better voices:** for the most natural voice on iPhone, go to **Settings › Accessibility › Spoken Content › Voices › English** and download an *Enhanced* or *Premium* voice. Then choose it in ⚙ Options.
 - **60 starter questions**, written from the King James Version, in three age tiers:
   - **Little Learners (ages 5–8):** 20 questions, 3 choices each, a hint on every card, and friendly explanations.
   - **Kids (ages 9–12):** 20 questions from Abraham to Pentecost.
@@ -84,6 +91,9 @@ Mark the right answer with `*`, or add a line such as `Answer: B`. You can also 
 ## Selling or sharing
 
 - The app and all 60 starter questions are original works by AnalyticsByShanikwa. Quotations are from the King James Version, which is in the public domain in the United States.
+- **Bible text:** King James Version, Pure Cambridge Edition (from the MIT-licensed [scrollmapper/bible_databases](https://github.com/scrollmapper/bible_databases) project). Small-capital divine names (LORD, GOD) and the Psalm titles were checked against the public-domain [eBible.org KJV](https://ebible.org/kjv/).
+- **Selling in the United Kingdom:** in the UK, rights in the Authorized (King James) Version are vested in the Crown and administered by Cambridge University Press, the Crown's patentee. Before you sell the app in the UK with the full Bible inside it, get written permission from **Cambridge University Press (its Bibles permissions department)**. Once permission is granted, use the acknowledgment wording they give you. Until then, the app does not claim Cambridge's permission or endorsement. Sales in the US and most other countries need no permission.
+- **The audio** is your device's own text-to-speech voice reading the KJV text. It is not a recorded audiobook, and no third-party recording is included.
 - If you add questions quoting modern translations (NIV, ESV, NLT, and others), follow each publisher's quotation limits. Or stick with KJV, or use references only.
 - To make a branded copy for a church or client, edit the `BRAND` block near the top of `index.html`. Or, from the main Faithful Study folder, run `python3 tools/build-bible-edition.py` to rebuild this edition from the shared source. The script updates files in place and never touches `decks\`.
 
