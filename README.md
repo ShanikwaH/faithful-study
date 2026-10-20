@@ -1,6 +1,6 @@
 # Faithful Study: Offline Quiz & Study Vault
 
-**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.3.3
+**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.3.4
 
 Faithful Study turns any course material into practice exams you can take anywhere, with or without internet. It runs on laptops, desktops, iPhones, iPads, and Android phones, with nothing to install from an app store. Your data stays on your device.
 
@@ -130,6 +130,16 @@ The deck rides in the part of the link after `#`, which browsers never send to a
 For the Bible edition, add its address: `python tools\make-import-link.py deck.json https://shanikwah.github.io/bible-stories/`
 
 ---
+
+## Built-in private decks (locked with a passphrase)
+
+Your D550 Practice Exams 1 and 2 ship inside the app in `locked-decks.json`, encrypted (AES-256-GCM, with a key made from your passphrase by PBKDF2). Anyone can download the file, but without the passphrase it's unreadable.
+
+- **On each device, once:** open the app. On the Decks tab, type your passphrase in **🔒 Unlock your built-in decks** (capital letters don't matter). The decks load right away.
+- **After that it's automatic:** each time the app updates with new versions of those decks, they update in place, and your scores, mastery, and weak spots are kept. A deck you added earlier from a deck link is matched by its title, so you won't get duplicates.
+- **Settings › Built-in decks** shows whether this device is unlocked, and lets you forget the passphrase.
+- **Deck links still work** for any deck, including these. Use them on a device where you'd rather not enter the passphrase.
+- **To update the locked decks** (for the app owner): edit the deck files in the private `decks/` repo, run `python3 tools/lock-decks.py`, bump the version, and push. The passphrase and the deck list live in `decks/LOCK.json` in the private repo, never in this public one. To lock every device out, change both the passphrase and the salt.
 
 ## Study modes
 
