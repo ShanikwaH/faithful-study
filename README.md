@@ -1,6 +1,6 @@
 # Faithful Study: Offline Quiz & Study Vault
 
-**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.4.0
+**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.5.0
 
 Faithful Study turns any course material into practice exams you can take anywhere, with or without internet. It runs on laptops, desktops, iPhones, iPads, and Android phones, with nothing to install from an app store. Your data stays on your device.
 
@@ -132,6 +132,26 @@ For the Bible edition, add its address: `python tools\make-import-link.py deck.j
 ---
 
 **Ready-made decks:** Import › **📚 Ready-made decks** lists D550 Practice Exams 1 and 2 on every device, even a new one, with **📋 Copy link**, **📤 Share**, and **Add here**. To put a deck on another device, copy its link and paste it into **Import › 📋 Paste & import** there. If the deck is already on the device, **Update here** refreshes it and keeps your progress. These decks are in `deck-links.json`, which anyone who opens the app can read. To change them, edit the deck files in the private `decks/` folder, run `python3 tools/publish-deck-links.py`, bump the version, and push.
+
+## Study plans (Plan tab)
+
+Plan any course day by day until your exam, with any decks you have now or add later.
+- **🛠 Build a study plan:** fill in these fields, then tap **Create plan**:
+  - the plan name and course
+  - which decks to practice from
+  - your start and exam dates
+  - the days you study
+  - questions per session (10, 20, or 30)
+  - your lessons and readings in order (add a page or link after a `|`)
+  - milestones (add a date after a `|`)
+- **How the plan is laid out:**
+  - **Learning (about 60%):** each lesson, with practice on its topic. The lesson's chapter number is matched to the deck topic.
+  - **Review (about 25%):** mixed practice and weak spots, plus one exam simulation.
+  - **Final days:** exam simulations, weak spots, and flashcards the day before the exam.
+- **Every day:** **Today** lists the day's work, with **Catch up** first. **▶ Start** opens the right session, and finishing it checks the item off. Weak-spot review always pulls the questions you currently miss most. The Decks tab shows today's study at the top.
+- **↻ Re-plan from today:** keeps what you've finished and spreads the rest over your remaining study days. **Edit plan** changes the dates, days, decks, or lessons.
+- **⬇ Checklist (.md)**, **⬇ Calendar (.ics)** (open it on iPhone, then tap Add All), and **🔗 Copy link / 📤 Share**: paste the link into Import › 📋 Paste & import on another device.
+- **From an AI:** **Copy the AI prompt** (Plan tab). Or with Claude, use the `study-plan-builder` skill in `tools/skills/study-plan-builder/SKILL.md`, which also makes the checklist and calendar file. Paste the `studyplan/v1` reply into Import. You can keep several plans, one for each course.
 
 ## Study modes
 

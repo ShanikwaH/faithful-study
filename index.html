@@ -181,6 +181,7 @@ footer.foot{max-width:960px;margin:0 auto;padding:0 16px 30px;font-size:.8rem;co
   </div>
   <nav class="tabs" aria-label="Main">
     <button data-act="nav" data-view="decks">Decks</button>
+    <button data-act="nav" data-view="plan">Plan</button>
     <button data-act="nav" data-view="library">Library</button>
     <button data-act="nav" data-view="import">Import</button>
     <button data-act="nav" data-view="ai">AI<span class="hide-xs"> Builder</span></button>
@@ -204,7 +205,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.4.0",
+  version: "1.5.0",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -467,7 +468,7 @@ const isCorrect = (q, sel) => sel && sel.length === q.answer.length && sel.every
 
 /* ============ NAV & RENDER ============ */
 // Edition add-ons (e.g. the Bible reader in Bible Stories) register extra views and post-render hooks here.
-const EXTRA_VIEWS = {}, EXTRA_AFTER = [], BACKUP_KV = [], EXTRA_IMPORTERS = {};   // EXTRA_IMPORTERS: {"format-name": async obj => …} for links that carry something other than decks   // BACKUP_KV: ids of edition records in the "kv" store to include in backups
+const EXTRA_VIEWS = {}, EXTRA_AFTER = [], BACKUP_KV = [], EXTRA_IMPORTERS = {}, SESSION_HOOKS = [];   // SESSION_HOOKS: called with (session, result) when a session ends   // EXTRA_IMPORTERS: {"format-name": async obj => …} for links that carry something other than decks   // BACKUP_KV: ids of edition records in the "kv" store to include in backups
 function nav(view) { stopSpeak(); if (S.session && view !== "session" && !S.session.ended && S.session.mode === "exam") { toast("Finish or exit the exam first."); return; } stopTimer(); S.view = view; if (view !== "session") S.session = null; render(); window.scrollTo(0, 0); }
 function render() {
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.view === S.view ? "page" : "false"));
@@ -696,6 +697,7 @@ function finishSession() {
   if (s.real) Object.assign(result, {real: true, retest: s.retest, limit: s.limit});
   if (total) { getProg(s.deckId).attempts.push(result); saveProg(s.deckId); }
   S.lastResult = {...result, items: s.mode === "exam" ? items : graded, deckId: s.deckId, deckTitle: d?.title || s.deckTitle, filter: "all"};
+  SESSION_HOOKS.forEach(f => { try { f(s, result); } catch (e) { console.error(e); } });
   S.session = null; S.view = "results"; render(); window.scrollTo(0, 0);
 }
 
@@ -757,7 +759,7 @@ function fitFlash() { const inner = $("#flashInner"); if (!inner) return; const 
 function flashRate(ok) {
   stopSpeak(); const s = S.session, q = s.qs[s.i]; record(s.deckId, q, ok); saveProg(s.deckId);
   ok ? s.known++ : s.again++; s.i++; s.flipped = false;
-  if (s.i >= s.qs.length) getProg(s.deckId).attempts.push({date: Date.now(), mode: "flash", correct: s.known, total: s.qs.length, pct: pct(s.known, s.qs.length), secs: Math.round((Date.now() - s.start) / 1000), byTopic: {}});
+  if (s.i >= s.qs.length) { const r = {date: Date.now(), mode: "flash", correct: s.known, total: s.qs.length, pct: pct(s.known, s.qs.length), secs: Math.round((Date.now() - s.start) / 1000), byTopic: {}}; getProg(s.deckId).attempts.push(r); SESSION_HOOKS.forEach(f => { try { f(s, r); } catch (e) { console.error(e); } }); }
   render();
 }
 
@@ -1396,5 +1398,6 @@ window.addEventListener("beforeunload", e => { if (S.session && S.session.mode =
   window.addEventListener("hashchange", () => { if (location.hash.startsWith("#import=")) importFromLink(location.hash.slice(8)); });
 })();
 </script>
+<script src="studyplan.js"></script>
 </body>
 </html>

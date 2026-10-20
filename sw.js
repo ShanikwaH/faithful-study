@@ -1,6 +1,6 @@
 /* Faithful Study service worker: caches the app shell so it opens with no internet. */
-const CACHE = "faithful-study-v1.4.0";
-const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./deck-links.json", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png"];
+const CACHE = "faithful-study-v1.5.0";
+const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./deck-links.json", "./studyplan.js", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
   // cache: "reload" skips the browser's HTTP cache, so a new version never re-caches old files.

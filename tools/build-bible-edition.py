@@ -83,6 +83,10 @@ new_brand = '''const BRAND = {
 };'''
 html = html.replace(old_brand, new_brand.replace("__BASE_VERSION__", BASE_VERSION))
 
+# ---------- Faithful Study only: the study-plan tab ----------
+html = rep(html, '\n    <button data-act="nav" data-view="plan">Plan</button>', '')
+html = rep(html, '\n<script src="studyplan.js"></script>', '')
+
 # ---------- wording ----------
 html = rep(html, "…or paste here: a deck link, an AI's JSON reply, CSV rows, or plain-text questions", "…or paste here: a deck, prayer, or reading-plan link, an AI's JSON reply, CSV rows, or plain-text questions")
 html = rep(html, "Study any course offline with practice mode, timed exams, flashcards, and weak-spot review.",
@@ -170,6 +174,7 @@ html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></scri
 
 sw = (BASE / "sw.js").read_text(encoding="utf-8")
 sw = rep(sw, 'const CACHE = "faithful-study-v', 'const CACHE = "bible-stories-v')
+sw = rep(sw, '"./studyplan.js", ', '')
 # deck-links.json is rewritten below with the Bible starter decks (Faithful Study's D550 decks never reach this edition)
 sw = rep(sw, "/* Faithful Study service worker", "/* Bible Stories for All Ages service worker")
 sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", "./prayers.js", "./prayers.json", ')
