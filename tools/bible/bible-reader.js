@@ -56,6 +56,9 @@
   const vText = x => typeof x === "string" ? x : x[0];
   const vPara = x => typeof x !== "string" && x[1] === 1;
   const chapName = b => b === 18 ? "Psalm" : bookName(b);   // "Psalm 23", not "Psalms 23"
+  // Bible.com (YouVersion) book codes, for the narrated KJV audio link (The Listener's Bible, KJV Edition)
+  const USFM = "GEN EXO LEV NUM DEU JOS JDG RUT 1SA 2SA 1KI 2KI 1CH 2CH EZR NEH EST JOB PSA PRO ECC SNG ISA JER LAM EZK DAN HOS JOL AMO OBA JON MIC NAM HAB ZEP HAG ZEC MAL MAT MRK LUK JHN ACT ROM 1CO 2CO GAL EPH PHP COL 1TH 2TH 1TI 2TI TIT PHM HEB JAS 1PE 2PE 1JN 2JN 3JN JUD REV".split(" ");
+  const narratedUrl = (b, c) => `https://www.bible.com/audio-bible/1/${USFM[b]}.${c}.KJV`;
   const ref = (b, c, v1, v2) => `${chapName(b)} ${c}${v1 ? ":" + v1 + (v2 && v2 !== v1 ? "–" + v2 : "") : ""}`;
 
   /* ---------- reference parsing: "John 3:16", "Ps 23", "1 Cor 13:4-7", "Genesis 1-3", "Jude 5" ---------- */
@@ -197,7 +200,7 @@
     return `<div class="bgrid">${books().slice(from, to).map((b, i) => `<button class="btn bbook" data-act="bbook" data-b="${from + i}">${esc(b.n)}</button>`).join("")}</div>`;
   }
   function notice() {
-    return `<p class="help bnotice">${esc(BR.data.meta.edition)}. ${esc(BR.data.meta.notice)} Read aloud by your device's built-in voice.</p>`;
+    return `<p class="help bnotice">${esc(BR.data.meta.edition)}. ${esc(BR.data.meta.notice)} Read aloud by your device's built-in voice. The 🎧 narrated recording on Bible.com is The Listener's Bible®: KJV Edition, © 2007 Fellowship for the Performing Arts; it plays on Bible.com and is not stored in this app.</p>`;
   }
   function viewHome() {
     const r = BR.resume;
@@ -239,6 +242,7 @@
       <div class="row between" style="align-items:center;gap:8px"><h1 class="btitle">${esc(chapName(BR.book))} ${BR.ch}</h1>
         ${chapters(BR.book).length > 1 ? `<button class="btn sm" data-act="bchapters" aria-label="Choose another chapter of ${esc(bookName(BR.book))}">Chapters</button>` : ""}</div>
       ${ch.t ? `<p class="bpsalm">${esc(ch.t)}</p>` : ""}
+      <p class="bnarr"><a class="btn sm" href="${narratedUrl(BR.book, BR.ch)}" target="_blank" rel="noopener" aria-label="Hear ${esc(ref(BR.book, BR.ch))} narrated on Bible.com (opens in a new tab, needs internet)">🎧 Narrated on Bible.com</a> <span class="help">Human narration, needs internet</span></p>
       <article class="kjv" aria-label="${esc(ref(BR.book, BR.ch))}">${html}</article>
       <div class="row between" style="margin:14px 0">
         ${prev ? `<button class="btn" data-act="bgoto" data-b="${prev.b}" data-c="${prev.c}">← ${esc(ref(prev.b, prev.c))}</button>` : "<span></span>"}
@@ -385,6 +389,7 @@
 .vnum:hover,.vnum:focus-visible{background:var(--surface-2)}
 .kjv-quote{font-family:Georgia,serif;font-size:1.05rem;line-height:1.7}
 .bnotice{margin-top:22px}
+.bnarr{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}.bnarr .help{margin:0}
 .bplayer{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -6px 24px rgba(0,0,0,.12);padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
 .bpstatus{max-width:960px;margin:0 auto 6px;font-size:.85rem;color:var(--muted);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bpbtns{display:flex;gap:8px;justify-content:center;max-width:960px;margin:0 auto}
