@@ -291,6 +291,7 @@
   async function renderBible() {
     if (!BR.stateLoaded && DB.db !== null) { await loadState(); BR.stateLoaded = true; }   // the app's database opens at boot, after this file loads
     try { await loadData(); } catch (e) { return `<div class="card"><h1>Holy Bible</h1><p class="muted">${esc(BR.error)}</p></div>`; }
+    if ((BR.screen === "plans" || BR.screen === "home") && BR.plans.active && window.Prayers?.ensure) { try { await window.Prayers.ensure(); } catch (e) {} }
     const body = BR.screen === "read" ? viewRead() : BR.screen === "chapters" ? viewChapters() : BR.screen === "plans" ? viewPlans() : viewHome();
     return body + playerBar();
   }
@@ -382,13 +383,29 @@ Rules:
 - Balance the days by verse count so each day takes about the same time. Cover every chapter or passage exactly once, in order, with no empty days.
 - Use full English book names and only these reference forms: "Psalm 23", "Genesis 1-3", "John 3:16-21", "Matthew 2:19-3:17", "Jude". Numbered books as "1 Corinthians", "2 Kings". Use the King James Version book names (e.g., "Song of Solomon").
 - A day with more than one passage lists each passage separately.
+- Optional extras for a day: "verse" (one memorable KJV verse from that day's reading, e.g. "Genesis 1:1"), "prayer" (the title of a prayer, or {"title":"…","text":"…"} for a new short prayer written on that day's reading), and "milestone" (e.g. "Finish Genesis").
 Return ONLY valid JSON, no commentary, in exactly this format:
-{"format": "readingplan/v1", "plan": {"title": "Short title (under 50 characters)", "description": "One sentence.", "days": [["Genesis 1-2", "Matthew 1"], ["Genesis 3-5"]]}}`;
+{"format": "readingplan/v1", "plan": {"title": "Short title (under 50 characters)", "description": "One sentence.", "extras": {"prayer": true, "verse": true, "quiz": true, "prayerTopic": ""},
+ "milestones": [{"day": 30, "title": "One month done!"}],
+ "days": [{"read": ["Genesis 1-2", "Matthew 1"], "verse": "Genesis 1:27", "prayer": "A thank-you prayer"}, ["Genesis 3-5"]]}}`;
   function planMarkdown(id) {
     const st = planStatus(id); if (!st) return "";
     const start = parseDay(st.pr.start);
     return `# ${st.P.title}\n\n${st.P.description}\n\nStart: ${fmtDay(start)} · ${st.n} days · King James Version\n\n` +
-      st.P.days.map((d, i) => `- [${st.pr.done[i] ? "x" : " "}] Day ${i + 1} (${fmtDay(new Date(start.getTime() + i * DAY_MS))}): ${dayLabel(d)}`).join("\n") + "\n";
+      st.P.days.map((d, i) => { const x = dayExtras(id, i), more = [
+        ...x.milestones.map(m => `  - 🏁 ${m}`), x.verse ? `  - 📌 Memory verse: ${ref(x.verse.b, x.verse.c, x.verse.v)}: “${x.verse.text}”` : "",
+        x.prayer ? `  - 🙏 Prayer: ${x.prayer.title}` : "", x.quiz ? `  - ❓ ${x.quiz.qs.length} quiz questions (${x.quiz.deck.title})` : ""].filter(Boolean);
+        return `- [${st.pr.done[i] ? "x" : " "}] Day ${i + 1} (${fmtDay(new Date(start.getTime() + i * DAY_MS))}): ${dayLabel(d)}${more.length ? "\n" + more.join("\n") : ""}`; }).join("\n") + "\n";
+  }
+  function planICS(id) {
+    const st = planStatus(id); if (!st) return "";
+    const start = parseDay(st.pr.start), e2 = t => String(t).replace(/[\\;,]/g, m => "\\" + m).replace(/\n/g, "\\n"), stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+    const ymd = d => isoDay(d).replace(/-/g, "");
+    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//AnalyticsByShanikwa//Bible Stories//EN", "CALSCALE:GREGORIAN", ...st.P.days.map((d, i) => {
+      const dt = new Date(start.getTime() + i * DAY_MS), x = dayExtras(id, i);
+      const desc = [dayLabel(d), ...x.milestones.map(m => "🏁 " + m), x.verse ? `📌 ${ref(x.verse.b, x.verse.c, x.verse.v)}: ${x.verse.text}` : "", x.prayer ? `🙏 ${x.prayer.title}` : ""].filter(Boolean).join("\n");
+      return ["BEGIN:VEVENT", `UID:${id}-${i}@bible-stories`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ymd(dt)}`, `DTEND;VALUE=DATE:${ymd(new Date(dt.getTime() + DAY_MS))}`,
+        `SUMMARY:${e2(`Day ${i + 1}: ${dayLabel(d)}`)}`, `DESCRIPTION:${e2(desc)}`, "END:VEVENT"].join("\r\n"); }), "END:VCALENDAR"].join("\r\n");
   }
   function planJSON(id) {
     const P = planDef(id); if (!P) return "";
@@ -396,7 +413,9 @@ Return ONLY valid JSON, no commentary, in exactly this format:
   }
   function planObj(id) {
     const P = planDef(id); if (!P) return null;
-    return {format: "readingplan/v1", plan: {...(BUILT_IN.some(b => b.id === id) ? {builtIn: id} : {}), title: P.title, description: P.description, days: P.days.map(d => d.map(readingLabel))}};
+    const pr = BR.plans.progress[id] || {}, ex = {...(P.extras || {}), ...(pr.extras || {})}, ms = [...(P.milestones || []), ...(pr.milestones || [])];
+    const days = P.days.map((d, i) => { const r = d.map(readingLabel), x = P.dayX?.[i]; return x && Object.keys(x).length ? {read: r, ...x} : r; });
+    return {format: "readingplan/v1", plan: {...(BUILT_IN.some(b => b.id === id) ? {builtIn: id} : {}), title: P.title, description: P.description, ...(Object.keys(ex).length ? {extras: ex} : {}), ...(ms.length ? {milestones: ms} : {}), days}};
   }
   const planCache = {};
   function planDef(id) {
@@ -404,7 +423,7 @@ Return ONLY valid JSON, no commentary, in exactly this format:
     const bi = BUILT_IN.find(p => p.id === id);
     if (bi) return planCache[id] = {id, title: bi.title, description: bi.description, days: bi.make()};
     const c = BR.plans.custom.find(p => p.id === id); if (!c) return null;
-    return planCache[id] = {id, title: c.title, description: c.description || "", custom: true, days: c.days.map(day => day.flatMap(refToReadings))};
+    return planCache[id] = {id, title: c.title, description: c.description || "", custom: true, days: c.days.map(day => day.flatMap(refToReadings)), dayX: c.dayExtras || null, extras: c.extras || null, milestones: c.milestones || []};
   }
   function refToReadings(str) {   // "Genesis 1-3", "Psalm 23", "John 3:16-4:2", "Jude"; several can be joined with ";"
     return String(str).split(/;|\s+and\s+/i).map(x => x.trim()).filter(Boolean).flatMap(x => {
@@ -428,14 +447,93 @@ Return ONLY valid JSON, no commentary, in exactly this format:
     let behind = 0; for (let i = 0; i < todayIdx; i++) if (!pr.done[i]) behind++;
     return {P, pr, n, doneN, todayIdx, next, behind, finished: doneN >= n};
   }
+
+  /* ---------- daily extras on any plan: a prayer, a memory verse, story quiz questions, milestones ----------
+     Picked fresh from what's on the device, so prayers and quiz decks added later show up too. */
+  const EXTRA_ON = {prayer: true, verse: true, quiz: true, prayerTopic: ""};
+  const exOf = id => ({...EXTRA_ON, ...(planDef(id)?.extras || {}), ...(BR.plans.progress[id]?.extras || {})});
+  function autoMilestones(P) {   // "Finish Genesis" on the day the plan reads a book's last verse
+    if (P._ms) return P._ms; const last = {}, m = {};
+    P.days.forEach((d, i) => d.forEach(g => { if (g.c2 === chapters(g.b).length && g.v2 === lastV(g.b, g.c2)) last[g.b] = i; }));
+    Object.entries(last).forEach(([b, i]) => (m[i] = m[i] || []).push(`Finish ${bookName(+b)}`));
+    return P._ms = m;
+  }
+  const VERSE_STRONG = /\b(love|loveth|loved|faith|peace|trust|fear not|be not afraid|strength|strengthen|hope|salvation|save|mercy|grace|joy|rejoice|shepherd|believe|eternal|everlasting|forgive|comfort|refuge|praise|thanks|wisdom|light)\b/gi;
+  const VERSE_GOD = /\b(LORD|God|Jesus|Christ|Lord)\b/g;
+  // Well-known memory verses (references only; the words come from the app's KJV). One of these wins when it's in the day's reading.
+  const KEY_VERSES = "Genesis 1:1; Genesis 1:27; Genesis 2:7; Genesis 9:13; Genesis 12:2; Genesis 18:14; Genesis 28:15; Genesis 50:20; Exodus 3:14; Exodus 14:14; Exodus 15:2; Exodus 20:3; Exodus 20:12; Exodus 33:14; Leviticus 19:18; Numbers 6:24; Numbers 23:19; Deuteronomy 6:5; Deuteronomy 31:6; Deuteronomy 31:8; Deuteronomy 33:27; Joshua 1:9; Joshua 24:15; Judges 6:12; Ruth 1:16; 1 Samuel 3:10; 1 Samuel 16:7; 1 Samuel 17:47; 2 Samuel 22:2; 1 Kings 3:9; 1 Kings 19:12; 2 Kings 6:16; 1 Chronicles 16:11; 1 Chronicles 16:34; 2 Chronicles 7:14; 2 Chronicles 20:15; Ezra 8:22; Nehemiah 8:10; Esther 4:14; Job 1:21; Job 19:25; Job 42:2; Psalms 1:1; Psalms 4:8; Psalms 16:11; Psalms 18:2; Psalms 19:1; Psalms 19:14; Psalms 23:1; Psalms 27:1; Psalms 30:5; Psalms 34:8; Psalms 37:4; Psalms 46:1; Psalms 46:10; Psalms 51:10; Psalms 55:22; Psalms 56:3; Psalms 91:1; Psalms 100:4; Psalms 103:2; Psalms 107:1; Psalms 118:24; Psalms 119:11; Psalms 119:105; Psalms 121:1; Psalms 127:1; Psalms 139:14; Psalms 145:18; Psalms 147:3; Psalms 150:6; Proverbs 3:5; Proverbs 3:6; Proverbs 4:23; Proverbs 15:1; Proverbs 16:3; Proverbs 16:9; Proverbs 17:17; Proverbs 18:10; Proverbs 22:6; Proverbs 31:30; Ecclesiastes 3:1; Ecclesiastes 12:1; Song of Solomon 8:7; Isaiah 6:8; Isaiah 9:6; Isaiah 26:3; Isaiah 40:8; Isaiah 40:31; Isaiah 41:10; Isaiah 43:2; Isaiah 53:5; Isaiah 55:8; Jeremiah 17:14; Jeremiah 29:11; Jeremiah 33:3; Lamentations 3:22; Lamentations 3:23; Ezekiel 36:26; Daniel 3:17; Daniel 6:22; Hosea 6:3; Joel 2:28; Amos 5:24; Obadiah 1:15; Jonah 2:9; Micah 6:8; Nahum 1:7; Habakkuk 3:19; Zephaniah 3:17; Haggai 2:9; Zechariah 4:6; Malachi 3:10; Matthew 4:19; Matthew 5:9; Matthew 5:14; Matthew 5:16; Matthew 6:33; Matthew 6:34; Matthew 7:7; Matthew 11:28; Matthew 19:14; Matthew 19:26; Matthew 22:37; Matthew 28:19; Matthew 28:20; Mark 9:23; Mark 10:27; Mark 11:24; Mark 12:31; Mark 16:15; Luke 1:37; Luke 2:11; Luke 6:31; Luke 6:38; Luke 11:9; Luke 15:7; Luke 19:10; John 1:1; John 1:12; John 3:16; John 8:12; John 8:32; John 10:11; John 11:25; John 13:34; John 14:6; John 14:27; John 15:5; John 15:13; John 16:33; John 20:29; Acts 1:8; Acts 2:38; Acts 4:12; Acts 16:31; Acts 20:35; Romans 3:23; Romans 5:8; Romans 6:23; Romans 8:28; Romans 8:31; Romans 8:38; Romans 10:9; Romans 12:2; Romans 12:12; Romans 15:13; 1 Corinthians 10:13; 1 Corinthians 13:4; 1 Corinthians 13:13; 1 Corinthians 15:58; 1 Corinthians 16:14; 2 Corinthians 5:7; 2 Corinthians 5:17; 2 Corinthians 9:7; 2 Corinthians 12:9; Galatians 2:20; Galatians 5:22; Galatians 6:9; Ephesians 2:8; Ephesians 3:20; Ephesians 4:32; Ephesians 6:10; Philippians 1:6; Philippians 4:6; Philippians 4:7; Philippians 4:13; Philippians 4:19; Colossians 3:2; Colossians 3:23; 1 Thessalonians 5:16; 1 Thessalonians 5:18; 2 Thessalonians 3:3; 1 Timothy 4:12; 1 Timothy 6:6; 2 Timothy 1:7; 2 Timothy 3:16; Titus 3:5; Philemon 1:7; Hebrews 4:16; Hebrews 11:1; Hebrews 11:6; Hebrews 12:1; Hebrews 13:5; Hebrews 13:8; James 1:5; James 1:17; James 1:22; James 4:8; 1 Peter 5:7; 1 Peter 2:9; 2 Peter 3:9; 1 John 1:9; 1 John 4:8; 1 John 4:18; 1 John 4:19; 2 John 1:6; 3 John 1:4; Jude 1:24; Revelation 3:20; Revelation 21:4; Revelation 22:13".split("; ");
+  let keyIdx = null;
+  function keyVerses() { if (keyIdx) return keyIdx; keyIdx = {}; KEY_VERSES.forEach(r => { const x = parseRef(r); if (!x.error) keyIdx[`${x.b}.${x.c1}.${x.v1}`] = 1; }); return keyIdx; }
+  function pickVerse(day) {   // a short, memorable verse from the day's reading
+    const K = keyVerses();
+    for (const g of day) for (let c = g.c1; c <= g.c2; c++) { const a = c === g.c1 ? g.v1 : 1, z = c === g.c2 ? g.v2 : verses(g.b, c).length;
+      for (let v = a; v <= z; v++) if (K[`${g.b}.${c}.${v}`]) return {b: g.b, c, v, text: vText(verses(g.b, c)[v - 1])}; }
+    let best = null, score = -1e9;
+    day.forEach(g => { for (let c = g.c1; c <= g.c2; c++) { const vs = verses(g.b, c), a = c === g.c1 ? g.v1 : 1, z = c === g.c2 ? g.v2 : vs.length;
+      for (let v = a; v <= z; v++) { const t = vText(vs[v - 1]), L = t.length; if (L < 35 || L > 230) continue;
+        const sc = (t.match(VERSE_STRONG) || []).length * 10 + Math.min(2, (t.match(VERSE_GOD) || []).length) * 4 - Math.abs(L - 110) / 15
+          - (/begat|cubits|shekels|sons of|generations of|years, and|and he died|my lord the king|slew|smote|servant unto/.test(t) ? 40 : 0);
+        if (sc > score) { score = sc; best = {b: g.b, c, v, text: t}; } } } });
+    return best;
+  }
+  function prayerList() { return window.Prayers?.state?.data?.prayers || null; }
+  function pickPrayer(day, i, ex, fixed) {
+    const list = prayerList(); if (!list || !list.length) return null;
+    if (fixed) { const f = list.find(p => p.id === fixed) || list.find(p => p.title.toLowerCase() === String(fixed).toLowerCase()); if (f) return f; }
+    let c = ex.prayerTopic ? list.filter(p => p.topics.includes(ex.prayerTopic)) : [];
+    if (!c.length) { const bs = new Set(day.map(g => g.b)); c = list.filter(p => p.kind === "bible" && p.refs.some(r => { const x = parseRef(r); return !x.error && bs.has(x.b); })); }
+    if (!c.length) c = list;
+    return c[(i * 7 + 3) % c.length];
+  }
+  function pickQuiz(day) {   // questions whose KJV sources cite today's chapters (or, failing that, today's books)
+    const bk = [...new Set(day.map(g => g.b))].map(b => ({b, re: new RegExp(`(?:^|[^0-9A-Za-z])${bookName(b).replace(/ /g, "\\s+")}\\s+(\\d+)`, "gi")}));
+    const hit = (q, exact) => (q.sources || []).some(src => bk.some(({b, re}) => { re.lastIndex = 0; let m; while ((m = re.exec(src))) { const c = +m[1]; if (!exact || day.some(g => g.b === b && c >= g.c1 && c <= g.c2)) return true; } return false; }));
+    let best = null;
+    for (const exact of [true, false]) {
+      S.decks.forEach(d => { const qs = d.questions.filter(q => hit(q, exact)); if (qs.length && (!best || qs.length > best.qs.length)) best = {deck: d, qs, exact}; });
+      if (best) break;
+    }
+    if (!best) return null; best.qs = best.qs.slice(0, best.exact ? 5 : 3); return best;
+  }
+  function dayExtras(id, i) {
+    const P = planDef(id), ex = exOf(id), x = P.dayX?.[i] || {}, pr = BR.plans.progress[id] || {}, day = P.days[i];
+    const milestones = [...(autoMilestones(P)[i] || []), ...(x.milestone ? [x.milestone] : []), ...[...(P.milestones || []), ...(pr.milestones || [])].filter(m => +m.day === i + 1).map(m => m.title)];
+    let verse = null;
+    if (ex.verse) { if (x.verse) { const r = parseRef(x.verse); if (!r.error) { const v = r.v1 || 1; verse = {b: r.b, c: r.c1, v, text: vText(verses(r.b, r.c1)[v - 1])}; } } if (!verse) verse = pickVerse(day); }
+    const prayer = ex.prayer ? pickPrayer(day, i, ex, x.prayer) : null;
+    const quiz = ex.quiz && x.quiz !== false ? pickQuiz(day) : null;
+    return {milestones, verse, prayer, quiz};
+  }
+  function extrasHtml(id, i) {
+    const x = dayExtras(id, i), out = [];
+    x.milestones.forEach(m => out.push(`<li>🏁 <strong>${esc(m)}</strong></li>`));
+    if (x.verse) out.push(`<li>📌 <strong>Memory verse:</strong> ${esc(ref(x.verse.b, x.verse.c, x.verse.v))}: <span class="kjv-inline">“${esc(x.verse.text)}”</span> <button class="btn sm" data-act="bpverse" data-b="${x.verse.b}" data-c="${x.verse.c}" data-v="${x.verse.v}" aria-label="Hear the memory verse">🔊 Hear it</button></li>`);
+    if (x.prayer) out.push(`<li>🙏 <strong>Prayer:</strong> ${esc(x.prayer.title)} <button class="btn sm" data-act="bpprayer" data-id="${esc(x.prayer.id)}">Open</button></li>`);
+    if (x.quiz) out.push(`<li>❓ <strong>${x.quiz.qs.length} story question${x.quiz.qs.length > 1 ? "s" : ""}${x.quiz.exact ? "" : ` from ${esc(bookName(planDef(id).days[i][0].b))}`}</strong> <span class="muted">(${esc(x.quiz.deck.title)})</span> <button class="btn sm primary" data-act="bpquiz" data-d="${i}">▶ Quiz me</button></li>`);
+    return out.length ? `<ul class="bpx">${out.join("")}</ul>` : "";
+  }
+  function extrasSettings(id) {
+    const ex = exOf(id), pr = BR.plans.progress[id] || {}, topics = window.Prayers?.state?.data?.topics || [];
+    const ms = [...(planDef(id).milestones || []).map(m => ({...m, fixed: true})), ...(pr.milestones || [])].sort((a, b) => a.day - b.day);
+    return `<details class="bpset"><summary>Daily extras and milestones</summary>
+      <div class="pchips" style="margin:8px 0">${[["prayer", "🙏 Daily prayer"], ["verse", "📌 Memory verse"], ["quiz", "❓ Story quiz questions"]].map(([k, l]) =>
+        `<label class="pchip pcheck"><input type="checkbox" data-bpex="${k}" ${ex[k] ? "checked" : ""}> ${l}</label>`).join("")}</div>
+      ${topics.length ? `<div class="field"><label for="bpTopic">Prayer topic</label><select id="bpTopic"><option value="">Match the day's reading</option>${topics.map(t => `<option value="${t.id}" ${ex.prayerTopic === t.id ? "selected" : ""}>${t.emoji} ${esc(t.label)}</option>`).join("")}</select></div>` : ""}
+      <p class="help">Quiz questions come from any deck whose answers cite the books you're reading, including decks you add later. 🏁 “Finish” milestones are added for every book you complete.</p>
+      <h3 style="margin:10px 0 6px;font-size:.95rem">Your milestones</h3>
+      ${ms.length ? `<ul class="bpms">${ms.map((m, k) => `<li>Day ${m.day}: ${esc(m.title)} ${m.fixed ? "" : `<button class="blink" data-act="bpmsdel" data-k="${(pr.milestones || []).indexOf(m)}">Remove</button>`}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">None yet.</p>`}
+      <form id="bpMs" class="row" style="margin-top:8px"><label class="vh" for="bpMsDay">Day number</label><input id="bpMsDay" type="number" min="1" max="${planDef(id).days.length}" placeholder="Day" style="width:80px">
+        <label class="vh" for="bpMsTitle">Milestone</label><input id="bpMsTitle" type="text" placeholder="e.g., Share my favorite verse at church" style="flex:1;min-width:150px"><button class="btn sm" type="submit">Add</button></form></details>`;
+  }
   function todayCard() {
     const id = BR.plans.active; if (!id) return "";
     const st = planStatus(id); if (!st) return "";
     if (st.finished) return `<div class="card bplancard"><strong>🎉 You finished ${esc(st.P.title)}!</strong> <button class="btn sm" data-act="bplans">Choose another plan</button></div>`;
     const d = st.next;
     return `<div class="card bplancard"><div class="row between"><strong>📅 ${esc(st.P.title)}</strong><span class="pill">Day ${d + 1} of ${st.n}</span></div>
-      <p style="margin:6px 0 10px">${esc(dayLabel(st.P.days[d]))}</p>
-      <div class="row"><button class="btn green" data-act="bpday" data-d="${d}">▶ Play day ${d + 1}</button><button class="btn" data-act="bplans">Open plan</button></div>
+      <p style="margin:6px 0 6px">${esc(dayLabel(st.P.days[d]))}</p>
+      ${extrasHtml(id, d)}
+      <div class="row" style="margin-top:8px"><button class="btn green" data-act="bpday" data-d="${d}">▶ Play day ${d + 1}</button><button class="btn" data-act="bplans">Open plan</button></div>
       ${st.behind ? `<p class="help" style="margin:8px 0 0">${st.behind} day${st.behind > 1 ? "s" : ""} to catch up. Keep going at your own pace.</p>` : ""}</div>`;
   }
   function viewPlans() {
@@ -446,11 +544,13 @@ Return ONLY valid JSON, no commentary, in exactly this format:
       const from = BR.planShowAll ? 0 : Math.max(0, Math.min(st.next, st.todayIdx) - 2), to = BR.planShowAll ? st.n : Math.min(st.n, Math.max(st.next, st.todayIdx) + 12);
       const rows = [];
       for (let i = from; i < to; i++) {
-        const done = !!st.pr.done[i], isToday = i === st.todayIdx;
-        rows.push(`<li class="bday ${done ? "done" : ""} ${isToday ? "today" : ""}">
+        const done = !!st.pr.done[i], isToday = i === st.todayIdx, open = BR.planOpenDay === undefined ? i === st.next : BR.planOpenDay === i;
+        const ms = dayExtras(id, i).milestones;
+        rows.push(`<li class="bdaywrap"><div class="bday ${done ? "done" : ""} ${isToday ? "today" : ""}">
           <button class="bcheck" data-act="bpdone" data-d="${i}" aria-pressed="${done}" aria-label="Day ${i + 1} ${done ? "read. Tap to mark unread" : "not read yet. Tap to mark read"}">${done ? "✓" : ""}</button>
-          <div class="bdaytxt"><b>Day ${i + 1}</b> <span class="muted">${fmtDay(new Date(start.getTime() + i * DAY_MS))}${isToday ? " · today" : ""}</span><br><button class="blink" data-act="bpopen" data-d="${i}">${esc(dayLabel(st.P.days[i]))}</button></div>
-          <button class="btn sm" data-act="bpday" data-d="${i}" aria-label="Play day ${i + 1}">▶</button></li>`);
+          <div class="bdaytxt"><b>Day ${i + 1}</b> <span class="muted">${fmtDay(new Date(start.getTime() + i * DAY_MS))}${isToday ? " · today" : ""}</span>${ms.map(m => ` <span class="pill">🏁 ${esc(m)}</span>`).join("")}<br><button class="blink" data-act="bpopen" data-d="${i}">${esc(dayLabel(st.P.days[i]))}</button></div>
+          <button class="btn sm ghost" data-act="bpdetail" data-d="${i}" aria-expanded="${open}" aria-label="Day ${i + 1} prayer, verse, and quiz">${open ? "▴" : "▾"}</button>
+          <button class="btn sm" data-act="bpday" data-d="${i}" aria-label="Play day ${i + 1}">▶</button></div>${open ? `<div class="bdayx">${extrasHtml(id, i) || `<p class="muted" style="margin:0">No extras for this day.</p>`}</div>` : ""}</li>`);
       }
       html += `<div class="card"><div class="row between"><h2 style="margin:0">${esc(st.P.title)}</h2><span class="pill">${st.doneN} of ${st.n} days</span></div>
         <p class="muted" style="margin:6px 0">${esc(st.P.description)}</p>
@@ -459,9 +559,11 @@ Return ONLY valid JSON, no commentary, in exactly this format:
         <div class="row">${st.finished ? "" : `<button class="btn green" data-act="bpday" data-d="${st.next}">▶ Play day ${st.next + 1}</button>`}
           <button class="btn sm" data-act="bpstart" data-id="${esc(id)}">Change start date</button>
           <button class="btn sm" data-act="bpexport" data-f="md" aria-label="Save this plan as a checklist (Markdown)">⬇ Checklist</button>
+          <button class="btn sm" data-act="bpexport" data-f="ics" aria-label="Save this plan as a calendar file">⬇ Calendar</button>
           <button class="btn sm" data-act="bpexport" data-f="json" aria-label="Save this plan as a plan file to share">⬇ Plan file</button>
           <button class="btn sm" data-act="bplink" aria-label="Copy a link to this plan">🔗 Copy link</button>
           ${navigator.share ? `<button class="btn sm" data-act="bplink" data-share="1" aria-label="Share a link to this plan">📤 Share</button>` : ""}</div>
+        ${extrasSettings(id)}
         <ol class="bdays">${rows.join("")}</ol>
         <button class="btn sm ghost" data-act="bpall">${BR.planShowAll ? "Show fewer days" : `Show all ${st.n} days`}</button></div>`;
     }
@@ -491,22 +593,30 @@ Return ONLY valid JSON, no commentary, in exactly this format:
   }
   function importPlan(text) {
     text = String(text || "").trim(); if (!text) { toast("Paste a plan first.", true); return; }
-    let title = "", description = "", days;
+    let title = "", description = "", days, dayExtras = null, extras = null, milestones = [];
+    const newPrayers = [];
     try {
       if (/^[\[{]/.test(text)) {
         const j = JSON.parse(text), pl = j.plan || j;
         if (j.format && j.format !== "readingplan/v1") throw new Error("This isn't a readingplan/v1 file.");
-        title = pl.title || ""; description = pl.description || ""; days = (pl.days || []).map(d => Array.isArray(d) ? d : d.readings || [d]);
+        title = pl.title || ""; description = pl.description || "";
+        const raw = pl.days || [];
+        days = raw.map(d => Array.isArray(d) ? d : typeof d === "string" ? [d] : (d.read || d.readings || []));
+        dayExtras = raw.map(d => { if (!d || Array.isArray(d) || typeof d !== "object") return null; const x = {}; ["prayer", "verse", "milestone"].forEach(k => { if (d[k] && typeof d[k] === "string") x[k] = d[k]; });
+          if (d.prayer && typeof d.prayer === "object" && d.prayer.text) { newPrayers.push(d.prayer); x.prayer = d.prayer.title; } if (d.quiz === false) x.quiz = false; return Object.keys(x).length ? x : null; });
+        extras = pl.extras || null; milestones = (pl.milestones || []).filter(m => m && m.title && +m.day >= 1);
       } else {
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
         if (lines.length && !/\d/.test(lines[0]) && !/^(jude|obadiah|philemon|2 ?john|3 ?john)\b/i.test(lines[0])) title = lines.shift();
         days = lines.map(l => [l.replace(/^(day\s*)?\d+\s*[:.)\-–]\s*/i, "")]);
       }
       if (!days.length) throw new Error("No days found.");
-      days.forEach((d, i) => d.forEach(x => { try { refToReadings(x); } catch (e) { throw new Error(`Day ${i + 1}, ${e.message}`); } }));
+      days.forEach((d, i) => { if (!d.length) throw new Error(`Day ${i + 1} has no reading.`); d.forEach(x => { try { refToReadings(x); } catch (e) { throw new Error(`Day ${i + 1}, ${e.message}`); } }); });
+      (dayExtras || []).forEach((x, i) => { if (x?.verse) { const r = parseRef(x.verse); if (r.error) throw new Error(`Day ${i + 1} verse: ${r.error}`); } });
     } catch (e) { toast("Couldn't import that plan. " + e.message, true, 8000); return; }
     const id = "custom-" + Date.now().toString(36);
-    BR.plans.custom.push({id, title: title || `My reading plan (${days.length} days)`, description, days});
+    BR.plans.custom.push({id, title: title || `My reading plan (${days.length} days)`, description, days, ...(dayExtras && dayExtras.some(Boolean) ? {dayExtras} : {}), ...(extras ? {extras} : {}), ...(milestones.length ? {milestones} : {})});
+    if (newPrayers.length && EXTRA_IMPORTERS["prayers/v1"]) window.Prayers?.addMine?.(newPrayers);
     saveState(); toast(`Imported “${title || "your plan"}” (${days.length} days).`);
     actions.bpstart({id});
   }
@@ -522,6 +632,13 @@ Return ONLY valid JSON, no commentary, in exactly this format:
   Object.assign(actions, {
     bplans: () => { BR.screen = "plans"; render(); window.scrollTo(0, 0); },
     bpall: () => { BR.planShowAll = !BR.planShowAll; render(); },
+    bpdetail: d => { const i = +d.d, st = planStatus(BR.plans.active), cur = BR.planOpenDay === undefined ? st?.next : BR.planOpenDay; BR.planOpenDay = cur === i ? null : i; render(); },
+    bpverse: d => { const b = +d.b, c = +d.c, v = +d.v; openChapter(b, c, {v1: v, v2: v}, v); startPlayback({b, c, v}, "selection"); },
+    bpprayer: d => window.Prayers?.openPrayer?.(d.id),
+    bpquiz: d => { const x = dayExtras(BR.plans.active, +d.d).quiz; if (!x) return; if (BR.play.on) pausePlayback();
+      S.session = {deckId: x.deck.id, deckTitle: x.deck.title, mode: "practice", qs: shuffle(x.qs).map(q => ({...q})), i: 0, ans: {}, checked: {}, flags: {}, hints: {}, start: Date.now(), limit: 0, ended: false, flipped: false, known: 0, again: 0};
+      S.view = "session"; render(); window.scrollTo(0, 0); },
+    bpmsdel: d => { const pr = BR.plans.progress[BR.plans.active]; if (!pr?.milestones) return; pr.milestones.splice(+d.k, 1); saveState(); render(); },
     bpstart: d => {
       const P = planDef(d.id); if (!P) return; const pr = BR.plans.progress[d.id];
       openModal(`<h2>${esc(P.title)}</h2><p class="muted">${P.days.length} days. Day 1 is the date you choose. Miss a day? It stays open so you can catch up.</p>
@@ -558,7 +675,7 @@ Return ONLY valid JSON, no commentary, in exactly this format:
     bbdays: d => { $("#bbDays").value = d.n; bbPreview(); },
     bpprompt: async () => { try { await navigator.clipboard.writeText(PLAN_PROMPT); toast("Prompt copied. Paste it into any AI and describe your plan."); } catch (e) { download("reading-plan-prompt.txt", PLAN_PROMPT, "text/plain"); } },
     bpexport: d => { const id = BR.plans.active, P = planDef(id); if (!P) return; const slugT = P.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-      if (d.f === "md") download(slugT + ".md", planMarkdown(id), "text/markdown"); else download(slugT + ".readingplan.json", planJSON(id), "application/json"); },
+      if (d.f === "md") download(slugT + ".md", planMarkdown(id), "text/markdown"); else if (d.f === "ics") download(slugT + ".ics", planICS(id), "text/calendar"); else download(slugT + ".readingplan.json", planJSON(id), "application/json"); },
     bpclip: async () => { let t = ""; try { t = await navigator.clipboard.readText(); } catch (e) { toast("Your browser didn't allow reading the clipboard. Long-press the box, tap Paste, then tap Import plan.", true, 8000); $("#bpText")?.focus(); return; } importPlan(t); },
     bbook: d => { BR.book = +d.b; BR.screen = chapters(+d.b).length === 1 ? "read" : "chapters"; BR.ch = 1; BR.sel = null; render(); window.scrollTo(0, 0); },
     bch: d => openChapter(BR.book, +d.c),
@@ -617,6 +734,17 @@ Return ONLY valid JSON, no commentary, in exactly this format:
       if (BR.play.on && BR.play.pos) startPlayback(BR.play.pos, BR.play.scope, resumeOpts());   // apply new speed/voice/timer right away
       else updateBar();
     }
+  });
+  document.addEventListener("change", e => {
+    const pr = BR.plans.progress[BR.plans.active]; if (!pr) return;
+    if (e.target.dataset?.bpex) { pr.extras = {...(pr.extras || {}), [e.target.dataset.bpex]: e.target.checked}; saveState(); render(); }
+    else if (e.target.id === "bpTopic") { pr.extras = {...(pr.extras || {}), prayerTopic: e.target.value}; saveState(); render(); }
+  });
+  document.addEventListener("submit", e => {
+    if (e.target.id !== "bpMs") return; e.preventDefault();
+    const pr = BR.plans.progress[BR.plans.active], day = +$("#bpMsDay").value, title = $("#bpMsTitle").value.trim(), n = planDef(BR.plans.active).days.length;
+    if (!pr || !title || !(day >= 1 && day <= n)) { toast(`Enter a day from 1 to ${n} and a milestone.`, true); return; }
+    (pr.milestones = pr.milestones || []).push({day, title}); saveState(); render(); toast(`Milestone added on day ${day}.`);
   });
   const bbOpts = () => ({scope: $("#bbScope").value, from: +$("#bbFrom").value, to: +$("#bbTo").value, extra: $("#bbExtra").value, days: +$("#bbDays").value});
   function bbPreview() {
@@ -700,6 +828,14 @@ body:has(.bplayer) #toast{bottom:calc(118px + env(safe-area-inset-bottom))}
 .bdaytxt{flex:1;min-width:0;font-size:.92rem}
 .blink{background:none;border:0;padding:2px 0;color:var(--accent);font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .bbrange{gap:10px}
+.bdaywrap{list-style:none}
+.bdayx{margin:4px 0 4px 44px}
+.bpx{list-style:none;padding:0;margin:6px 0;display:grid;gap:6px;font-size:.93rem}
+.bpx li{line-height:1.5}
+.kjv-inline{font-family:Georgia,serif}
+.bpset{margin:10px 0;padding:8px 12px;border:1px solid var(--border);border-radius:12px}
+.bpset summary{cursor:pointer;font-weight:600}
+.bpms{margin:4px 0;padding-left:18px}
 .bmlist{display:grid;gap:6px}
 .bmitem{display:flex;gap:6px;align-items:stretch}
 .bmgo{flex:1;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;min-width:0}
@@ -720,5 +856,5 @@ body:has(.bplayer) #toast{bottom:calc(118px + env(safe-area-inset-bottom))}
     if (same) { toast("You already have this plan."); actions.bpstart({id: same.id}); return; }
     importPlan(JSON.stringify(obj));
   };
-  window.BibleReader = {parseRef: q => (BR.data ? parseRef(q) : null), state: BR, load: loadData, planDef: id => (BR.data ? planDef(id) : null), dayLabel, importPlan};
+  window.BibleReader = {parseRef: q => (BR.data ? parseRef(q) : null), state: BR, load: loadData, planDef: id => (BR.data ? planDef(id) : null), dayLabel, importPlan, dayExtras: (id, i) => dayExtras(id, i)};
 })();

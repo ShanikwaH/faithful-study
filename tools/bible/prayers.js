@@ -197,6 +197,7 @@
       P.mine.unshift({id: "mine-" + Date.now().toString(36) + added, title: String(m.title).slice(0, 80), text: String(m.text), anchor: m.anchor || "", topics: (m.topics || []).filter(t => P.data.topics.some(x => x.id === t)), at: Date.now()}); added++;
     }
     saveState(); mergeMine();
+    if (obj.quiet) return;
     P.q = ""; P.topic = null;
     if (obj.open && byId(obj.open)) { P.kind = "all"; P.open = obj.open; nav("prayers"); setTimeout(() => document.getElementById("pr-" + obj.open)?.scrollIntoView({block: "start"}), 100); return; }
     P.kind = "mine"; P.open = null; nav("prayers");
@@ -259,5 +260,8 @@
 mark{background:color-mix(in srgb,#F2C14E 55%,transparent);color:inherit;border-radius:3px;padding:0 1px}
 @media (max-width:420px){ .pchip{padding:7px 10px;font-size:.86rem} .pbody{font-size:1.04rem} }`;
   document.head.appendChild(css);
-  window.Prayers = {state: P, load, results, prayerOfDay: () => P.data && prayerOfDay()};
+  window.Prayers = {state: P, load, results, prayerOfDay: () => P.data && prayerOfDay(),
+    ensure: async () => { if (!P.stateLoaded && DB.db !== null) { await loadState(); P.stateLoaded = true; } await load(); return P.data.prayers; },
+    openPrayer: id => { P.q = ""; P.topic = null; P.kind = "all"; P.open = id; nav("prayers"); setTimeout(() => document.getElementById("pr-" + id)?.scrollIntoView({block: "start"}), 120); },
+    addMine: list => EXTRA_IMPORTERS["prayers/v1"]({format: "prayers/v1", prayers: list, quiet: true})};
 })();

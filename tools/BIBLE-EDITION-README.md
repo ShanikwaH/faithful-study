@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.5.0
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.5.1
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
@@ -19,9 +19,12 @@ This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and
     - **▶ Play day** reads that day's passages one after another with the verse highlighted, then checks the day off. If you stop partway, playing that day again picks up where you stopped.
     - Tap a day's circle to mark it read or unread. Missed days stay open, and the plan shows how many days you have to catch up.
     - Today's reading also shows on the Bible home screen.
+    - **Daily extras on every plan:** each day shows a **📌 memory verse** from the reading (**🔊 Hear it**), a **🙏 prayer** matched to the reading or to a topic you pick (**Open** takes you to it), and **❓ story quiz questions** from any deck whose answers cite those chapters (**▶ Quiz me**). 🏁 **Milestones** mark the day you finish each book. Tap ▾ on any day to see its extras. Today's extras also show on the Bible home screen.
+    - **Daily extras and milestones** (on the plan card): turn the prayer, verse, or quiz on or off, choose a prayer topic, and add your own milestones by day number. Your own prayers and any quiz decks you add later are included automatically.
+    - **⬇ Calendar** saves the plan as a calendar file. Each day lists its reading, verse, and prayer. On iPhone, open the file, then tap Add All.
     - **🛠 Build your own plan:** choose what to read (the whole Bible, a testament, the Gospels, or a range of books such as Genesis to Deuteronomy), add a daily extra (New Testament, Psalms, Proverbs, or both), and set the number of days. The app sizes each day by verse count and shows Day 1 before you create it.
     - **Save or share a plan:** **⬇ Checklist** saves a Markdown checklist with dates and ✓ marks. **⬇ Plan file** saves a `readingplan/v1` file someone else can import.
-    - **Plans from an AI:** for topical or chronological plans, tap **Copy the AI prompt**, paste it into any AI with your idea, then import the reply. With Claude, the `reading-plan-builder` skill in `skills/reading-plan-builder/SKILL.md` does the same job and also makes a checklist and calendar file.
+    - **Plans from an AI:** for topical or chronological plans, tap **Copy the AI prompt**, paste it into any AI with your idea, then import the reply. With Claude, the `reading-plan-builder` skill in `skills/reading-plan-builder/SKILL.md` does the same job, including a memory verse, prayer, quiz, and milestones for each day, and also makes a checklist and calendar file.
     - **Import a plan:** paste a `readingplan/v1` plan (made by the reading-plan skill or any AI) or a simple list with one day per line, such as `Genesis 1-3; Matthew 1`, then tap **Import plan** or **📋 Paste & import**.
   - **Better voices:** for the most natural voice on iPhone, go to **Settings › Accessibility › Spoken Content › Voices › English** and download an *Enhanced* or *Premium* voice. Then choose it in ⚙ Options.
 - **60 starter questions**, written from the King James Version, in three age tiers:
