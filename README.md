@@ -1,6 +1,6 @@
 # Faithful Study: Offline Quiz & Study Vault
 
-**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.3.9
+**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.4.0
 
 Faithful Study turns any course material into practice exams you can take anywhere, with or without internet. It runs on laptops, desktops, iPhones, iPads, and Android phones, with nothing to install from an app store. Your data stays on your device.
 
@@ -131,9 +131,7 @@ For the Bible edition, add its address: `python tools\make-import-link.py deck.j
 
 ---
 
-**Deck links inside the app:** Import › **📎 Deck links** lists every deck on the device with **📋 Copy link** (and **📤 Share** on phones). Each deck's ••• menu also has **Copy deck link**. Paste the link into Import › **📋 Paste & import** in the other copy of the app. You don't need the links page.
-
-**Ready-made decks:** the same card also lists D550 Practice Exams 1 and 2 on every device, even a new one, with **📋 Copy link**, **📤 Share**, and **Add here**. If the deck is already on the device, **Update here** refreshes it and keeps your progress. These decks are in `deck-links.json`, which anyone who opens the app can read. To change them, edit the deck files in the private `decks/` folder, run `python3 tools/publish-deck-links.py`, bump the version, and push.
+**Ready-made decks:** Import › **📚 Ready-made decks** lists D550 Practice Exams 1 and 2 on every device, even a new one, with **📋 Copy link**, **📤 Share**, and **Add here**. To put a deck on another device, copy its link and paste it into **Import › 📋 Paste & import** there. If the deck is already on the device, **Update here** refreshes it and keeps your progress. These decks are in `deck-links.json`, which anyone who opens the app can read. To change them, edit the deck files in the private `decks/` folder, run `python3 tools/publish-deck-links.py`, bump the version, and push.
 
 ## Study modes
 
