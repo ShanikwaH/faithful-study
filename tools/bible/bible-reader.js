@@ -392,7 +392,11 @@ Return ONLY valid JSON, no commentary, in exactly this format:
   }
   function planJSON(id) {
     const P = planDef(id); if (!P) return "";
-    return JSON.stringify({format: "readingplan/v1", plan: {title: P.title, description: P.description, days: P.days.map(d => d.map(readingLabel))}}, null, 1);
+    return JSON.stringify(planObj(id), null, 1);
+  }
+  function planObj(id) {
+    const P = planDef(id); if (!P) return null;
+    return {format: "readingplan/v1", plan: {...(BUILT_IN.some(b => b.id === id) ? {builtIn: id} : {}), title: P.title, description: P.description, days: P.days.map(d => d.map(readingLabel))}};
   }
   const planCache = {};
   function planDef(id) {
@@ -455,7 +459,9 @@ Return ONLY valid JSON, no commentary, in exactly this format:
         <div class="row">${st.finished ? "" : `<button class="btn green" data-act="bpday" data-d="${st.next}">▶ Play day ${st.next + 1}</button>`}
           <button class="btn sm" data-act="bpstart" data-id="${esc(id)}">Change start date</button>
           <button class="btn sm" data-act="bpexport" data-f="md" aria-label="Save this plan as a checklist (Markdown)">⬇ Checklist</button>
-          <button class="btn sm" data-act="bpexport" data-f="json" aria-label="Save this plan as a plan file to share">⬇ Plan file</button></div>
+          <button class="btn sm" data-act="bpexport" data-f="json" aria-label="Save this plan as a plan file to share">⬇ Plan file</button>
+          <button class="btn sm" data-act="bplink" aria-label="Copy a link to this plan">🔗 Copy link</button>
+          ${navigator.share ? `<button class="btn sm" data-act="bplink" data-share="1" aria-label="Share a link to this plan">📤 Share</button>` : ""}</div>
         <ol class="bdays">${rows.join("")}</ol>
         <button class="btn sm ghost" data-act="bpall">${BR.planShowAll ? "Show fewer days" : `Show all ${st.n} days`}</button></div>`;
     }
@@ -542,6 +548,13 @@ Return ONLY valid JSON, no commentary, in exactly this format:
       startPlayback(start, "plan", {end: {b: cur.b, c: cur.c2, v: cur.v2}, queue: segs.slice(seg + 1), planId: id, planDay: i, seg});
     },
     bpimport: () => importPlan($("#bpText")?.value),
+    bplink: async d => {
+      const id = BR.plans.active, P = planDef(id); if (!P) return;
+      const link = await makeLink(planObj(id)), msg = `Reading plan: ${P.title}. Open Bible Stories from your Home Screen, go to Import, and tap Paste & import.`;
+      if (d.share && navigator.share) { try { await navigator.share({title: P.title, text: msg, url: link}); } catch (e) {} return; }
+      try { await navigator.clipboard.writeText(link); toast("Plan link copied. In the other copy of the app, go to Import and tap 📋 Paste & import.", false, 6000); }
+      catch (e) { openModal(`<h2>Plan link</h2><textarea readonly style="min-height:140px" onfocus="this.select()">${esc(link)}</textarea><div class="actions"><button class="btn" data-act="modal-close">Close</button></div>`); }
+    },
     bbdays: d => { $("#bbDays").value = d.n; bbPreview(); },
     bpprompt: async () => { try { await navigator.clipboard.writeText(PLAN_PROMPT); toast("Prompt copied. Paste it into any AI and describe your plan."); } catch (e) { download("reading-plan-prompt.txt", PLAN_PROMPT, "text/plain"); } },
     bpexport: d => { const id = BR.plans.active, P = planDef(id); if (!P) return; const slugT = P.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -697,5 +710,15 @@ body:has(.bplayer) #toast{bottom:calc(118px + env(safe-area-inset-bottom))}
 
   /* ---------- start ---------- */
   if (canSpeak && "onvoiceschanged" in speechSynthesis) speechSynthesis.addEventListener("voiceschanged", () => {});
+  // Plan links pasted in Import › Paste & import (or opened from a link) land here.
+  EXTRA_IMPORTERS["readingplan/v1"] = async obj => {
+    await loadData(); if (!BR.stateLoaded && DB.db !== null) { await loadState(); BR.stateLoaded = true; }
+    BR.screen = "plans"; nav("bible");
+    const pl = obj.plan || {};
+    if (pl.builtIn && BUILT_IN.some(b => b.id === pl.builtIn)) { actions.bpstart({id: pl.builtIn}); return; }
+    const same = BR.plans.custom.find(c => c.title === pl.title && JSON.stringify(c.days) === JSON.stringify(pl.days));
+    if (same) { toast("You already have this plan."); actions.bpstart({id: same.id}); return; }
+    importPlan(JSON.stringify(obj));
+  };
   window.BibleReader = {parseRef: q => (BR.data ? parseRef(q) : null), state: BR, load: loadData, planDef: id => (BR.data ? planDef(id) : null), dayLabel, importPlan};
 })();

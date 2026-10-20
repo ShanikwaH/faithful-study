@@ -1,5 +1,5 @@
 /* Faithful Study service worker: caches the app shell so it opens with no internet. */
-const CACHE = "faithful-study-v1.3.7";
+const CACHE = "faithful-study-v1.3.8";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./deck-links.json", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

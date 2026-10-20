@@ -75,6 +75,7 @@
         <button class="btn sm" data-act="prfav" data-id="${p.id}" aria-pressed="${fav}">${fav ? "★ Saved" : "☆ Favorite"}</button>
         <button class="btn sm" data-act="prcopy" data-id="${p.id}">📋 Copy</button>
         <button class="btn sm" data-act="prshare" data-id="${p.id}">📤 Share</button>
+        <button class="btn sm" data-act="prlink" data-id="${p.id}" aria-label="Copy a link to this prayer">🔗 Copy link</button>
         ${p.kind === "mine" ? `<button class="btn sm" data-act="predit" data-id="${p.id}">✏️ Edit</button><button class="btn sm ghost" data-act="prdel" data-id="${p.id}" style="color:var(--bad)">Delete</button>` : ""}</div>`
       : `<p class="psnip">${hl(p.body.replace(/\s+/g, " ").slice(0, 120))}…</p>`;
     return `<article class="card pcard ${featured ? "pday" : ""}" id="pr-${p.id}">
@@ -89,7 +90,8 @@
     const what = [t ? `${t.emoji} ${t.label}` : "", ts.length ? `“${P.q.trim().replace(/^["“]+|["”]+$/g, "")}”` : "", P.kind !== "all" ? KINDS.find(k => k[0] === P.kind)[1] : ""].filter(Boolean).join(" · ");
     if (!rs.length) return `<div class="card empty"><p><strong>No prayers found${what ? " for " + esc(what) : ""}.</strong></p><p class="muted">${P.kind === "fav" ? "Tap ☆ Favorite on any prayer to save it here." : P.kind === "mine" ? "Tap ＋ Add your own prayer to write one. It stays on this device." : "Try a shorter word, a different feeling, or clear the filters."}</p>
       ${P.q || P.topic || P.kind !== "all" ? `<button class="btn" data-act="prclear">Clear search and filters</button>` : ""}</div>`;
-    return `<p class="muted pcount" aria-live="polite">${rs.length} prayer${rs.length > 1 ? "s" : ""}${what ? " · " + esc(what) : ""}${P.q || P.topic || P.kind !== "all" ? ` · <button class="blink" data-act="prclear">Clear</button>` : ""}</p>` + rs.map(p => card(p)).join("");
+    const allMine = P.kind === "mine" && P.mine.length > 1 ? `<div class="row" style="margin:0 0 10px"><button class="btn sm" data-act="prlinkall">🔗 Copy one link for all ${P.mine.length} of my prayers</button></div>` : "";
+    return `<p class="muted pcount" aria-live="polite">${rs.length} prayer${rs.length > 1 ? "s" : ""}${what ? " · " + esc(what) : ""}${P.q || P.topic || P.kind !== "all" ? ` · <button class="blink" data-act="prclear">Clear</button>` : ""}</p>` + allMine + rs.map(p => card(p)).join("");
   }
   function chips(group, label) {
     return `<h3 class="pgrp">${label}</h3><div class="pchips" role="group" aria-label="${esc(label)}">${P.data.topics.filter(t => t.group === group).map(t =>
@@ -178,6 +180,29 @@
     toast(i >= 0 ? "Prayer updated." : "Prayer saved. Find it under 🖊️ My prayers.");
   });
 
+  /* ---------- prayer links: copy, then Import › Paste & import in Bible Stories on another device ---------- */
+  const mineOut = m => ({title: m.title, text: m.text, anchor: m.anchor || "", topics: m.topics});
+  async function copyPrayerLink(obj, label) {
+    const link = await makeLink(obj);
+    try { await navigator.clipboard.writeText(link); toast(`${label} link copied. In Bible Stories on the other device, go to Import and tap 📋 Paste & import.`, false, 6500); }
+    catch (e) { openModal(`<h2>${esc(label)} link</h2><textarea readonly style="min-height:140px" onfocus="this.select()">${esc(link)}</textarea><div class="actions"><button class="btn" data-act="modal-close">Close</button></div>`); }
+  }
+  EXTRA_IMPORTERS["prayers/v1"] = async obj => {
+    if (!P.stateLoaded && DB.db !== null) { await loadState(); P.stateLoaded = true; }
+    await load();
+    let added = 0;
+    for (const m of obj.prayers || []) {
+      if (!m.title || !m.text) continue;
+      if (P.mine.some(x => x.title === m.title && x.text === m.text)) continue;
+      P.mine.unshift({id: "mine-" + Date.now().toString(36) + added, title: String(m.title).slice(0, 80), text: String(m.text), anchor: m.anchor || "", topics: (m.topics || []).filter(t => P.data.topics.some(x => x.id === t)), at: Date.now()}); added++;
+    }
+    saveState(); mergeMine();
+    P.q = ""; P.topic = null;
+    if (obj.open && byId(obj.open)) { P.kind = "all"; P.open = obj.open; nav("prayers"); setTimeout(() => document.getElementById("pr-" + obj.open)?.scrollIntoView({block: "start"}), 100); return; }
+    P.kind = "mine"; P.open = null; nav("prayers");
+    toast(added ? `Added ${added} prayer${added > 1 ? "s" : ""} to 🖊️ My prayers.` : "You already have these prayers.");
+  };
+
   /* ---------- actions ---------- */
   const byId = id => P.data.prayers.find(p => p.id === id);
   Object.assign(actions, {
@@ -190,6 +215,8 @@
     prcopy: d => { closeModal(false); copy(byId(d.id)); },
     prshare: d => share(byId(d.id)),
     pradd: () => prayerForm(),
+    prlink: d => { const p = byId(d.id); copyPrayerLink(p.kind === "mine" ? {format: "prayers/v1", prayers: [mineOut(p)]} : {format: "prayers/v1", open: p.id}, "Prayer"); },
+    prlinkall: () => copyPrayerLink({format: "prayers/v1", prayers: P.mine.map(mineOut)}, "My prayers"),
     predit: d => prayerForm(P.mine.find(m => m.id === d.id)),
     prdel: async d => { const m = P.mine.find(x => x.id === d.id); if (!m || !(await confirmBox("Delete this prayer?", `“${esc(m.title)}” will be removed from this device.`, "Delete", true))) return;
       P.mine = P.mine.filter(x => x.id !== d.id); P.favs = P.favs.filter(x => x !== d.id); saveState(); mergeMine(); render(); toast("Prayer deleted."); }

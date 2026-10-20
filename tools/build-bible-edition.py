@@ -77,11 +77,13 @@ new_brand = '''const BRAND = {
   scenarioLabel: "Story-based questions (recommended)",
   speechRate: 0.92,
   autoSeed: true,
-  sampleButton: "Load the 60 starter Bible stories"
+  sampleButton: "Load the 60 starter Bible stories",
+  builtInLinks: "deck-links.json"
 };'''
 html = html.replace(old_brand, new_brand.replace("__BASE_VERSION__", BASE_VERSION))
 
 # ---------- wording ----------
+html = rep(html, "…or paste here: a deck link, an AI's JSON reply, CSV rows, or plain-text questions", "…or paste here: a deck, prayer, or reading-plan link, an AI's JSON reply, CSV rows, or plain-text questions")
 html = rep(html, "Study any course offline with practice mode, timed exams, flashcards, and weak-spot review.",
                  "Learn Bible stories at home, at church, or on the go, even offline. Practice with read-aloud questions, flashcards, and friendly challenges for every age.")
 html = rep(html, "Tip: Ask Claude, ChatGPT, or any AI to turn your PDFs, slides, or videos into a quiz. The Import tab has a copy-paste prompt.",
@@ -167,13 +169,14 @@ html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></scri
 
 sw = (BASE / "sw.js").read_text(encoding="utf-8")
 sw = rep(sw, 'const CACHE = "faithful-study-v', 'const CACHE = "bible-stories-v')
-sw = rep(sw, '"./deck-links.json", ', '')   # Faithful Study's ready-made D550 deck links stay out of the Bible edition
+# deck-links.json is rewritten below with the Bible starter decks (Faithful Study's D550 decks never reach this edition)
 sw = rep(sw, "/* Faithful Study service worker", "/* Bible Stories for All Ages service worker")
 sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", "./prayers.js", "./prayers.json", ')
 for f in ("bible-reader.js", "kjv.json", "prayers.js", "prayers.json"): shutil.copy(BASE / "tools" / "bible" / f, OUT / f)
 # the reading-plan-builder skill (for Claude or any AI) ships with the app so plans can be made outside it too
 shutil.copytree(BASE / "tools" / "bible" / "skills", OUT / "skills", dirs_exist_ok=True)
 (OUT / "sw.js").write_text(sw, encoding="utf-8")
+(OUT / "deck-links.json").write_text(json.dumps({"decks": decks}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")   # ready-made links on the Import tab
 
 man = json.loads((BASE / "manifest.webmanifest").read_text(encoding="utf-8"))
 man.update(name="Bible Stories for All Ages", short_name="Bible Stories",
