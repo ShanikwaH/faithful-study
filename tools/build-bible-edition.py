@@ -156,8 +156,8 @@ html = html[:s_start] + "const SAMPLE = " + json.dumps({"decks": decks}, ensure_
 
 # ---------- KJV Bible reader with read-aloud (Bible edition only) ----------
 html = rep(html, '<button data-act="nav" data-view="decks">Decks</button>',
-                 '<button data-act="nav" data-view="decks">Decks</button>\n    <button data-act="nav" data-view="bible">Bible</button>')
-html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></script>\n</body>\n</html>")
+                 '<button data-act="nav" data-view="decks">Decks</button>\n    <button data-act="nav" data-view="bible">Bible</button>\n    <button data-act="nav" data-view="prayers">Prayers</button>')
+html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></script>\n<script src=\"prayers.js\"></script>\n</body>\n</html>")
 
 # ---------- write output ----------
 # Update files in place. Never delete OUT: it's a git repository, and OUT/decks is a separate
@@ -168,8 +168,8 @@ html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></scri
 sw = (BASE / "sw.js").read_text(encoding="utf-8")
 sw = rep(sw, 'const CACHE = "faithful-study-v', 'const CACHE = "bible-stories-v')
 sw = rep(sw, "/* Faithful Study service worker", "/* Bible Stories for All Ages service worker")
-sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", ')
-for f in ("bible-reader.js", "kjv.json"): shutil.copy(BASE / "tools" / "bible" / f, OUT / f)
+sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", "./prayers.js", "./prayers.json", ')
+for f in ("bible-reader.js", "kjv.json", "prayers.js", "prayers.json"): shutil.copy(BASE / "tools" / "bible" / f, OUT / f)
 # the reading-plan-builder skill (for Claude or any AI) ships with the app so plans can be made outside it too
 shutil.copytree(BASE / "tools" / "bible" / "skills", OUT / "skills", dirs_exist_ok=True)
 (OUT / "sw.js").write_text(sw, encoding="utf-8")
