@@ -204,7 +204,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.3.6",
+  version: "1.3.7",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -217,7 +217,7 @@ const BRAND = {
   scenarioLabel: "Scenario-based questions (recommended for WGU OAs and CPA-style exams)",
   speechRate: 1,
   autoSeed: false,               // true = load the built-in starter decks on first open
-  lockedDecks: "locked-decks.json",   // passphrase-locked built-in decks (made by tools/lock-decks.py); "" turns this off
+  builtInLinks: "deck-links.json",   // decks offered as copy-and-paste links on the Import tab (made by tools/publish-deck-links.py); "" turns this off
   sampleButton: "Try the sample deck"
 };
 const APP_ID = "faithful-study";
@@ -488,7 +488,7 @@ function applyBrand() {
 function updateNet() { const on = navigator.onLine, n = $("#netStatus"); n.textContent = on ? "Online" : "Offline mode"; n.classList.toggle("off", !on); }
 
 /* ============ VIEW: DECKS ============ */
-function renderDecks() { return lockCard() + renderDeckList(); }
+function renderDecks() { return renderDeckList(); }
 function renderDeckList() {
   if (!S.decks.length) return `
     <div class="card empty">
@@ -896,60 +896,13 @@ async function importDecks(decks, sourceLabel) {
   toast(`Imported ${n} deck${n > 1 ? "s" : ""} (${qn} questions)${sourceLabel ? " from " + sourceLabel : ""}.`);
   S.view = "decks"; render();
 }
-/* ============ LOCKED BUILT-IN DECKS ============
-   Private decks can ship inside the public app encrypted (AES-GCM, key from a passphrase with PBKDF2).
-   Type the passphrase once per device; after that every app update loads new versions of those decks
-   automatically and updates them in place, keeping your progress. Without the passphrase the file is unreadable. */
-const b64ToBytes = b => Uint8Array.from(atob(b), c => c.charCodeAt(0));
-const bytesToB64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
-async function lockedFile() {
-  if (!BRAND.lockedDecks || location.protocol === "file:" || !crypto?.subtle) return null;
-  try { const r = await fetch(BRAND.lockedDecks); if (!r.ok) return null; const j = await r.json(); return j.format === "faithful-locked/v1" ? j : null; } catch (e) { return null; }
-}
-async function deriveKey(pass, f) {
-  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass.normalize("NFKC").trim().toLowerCase()), "PBKDF2", false, ["deriveBits"]);
-  return new Uint8Array(await crypto.subtle.deriveBits({name: "PBKDF2", salt: b64ToBytes(f.kdf.salt), iterations: f.kdf.iterations, hash: "SHA-256"}, base, 256));
-}
-async function openLocked(f, raw) {
-  const key = await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["decrypt"]);
-  const plain = await crypto.subtle.decrypt({name: "AES-GCM", iv: b64ToBytes(f.iv)}, key, b64ToBytes(f.data));
-  return JSON.parse(new TextDecoder().decode(plain));
-}
-async function applyLocked(bundle) {
-  let added = 0, updated = 0;
-  for (const item of bundle.decks) {
-    const d = parseJSONDeck(item.deck, item.lockId)[0]; d.lockId = item.lockId;
-    const old = S.decks.find(x => x.lockId === item.lockId) || S.decks.find(x => x.title === d.title);
-    if (old) { d.id = old.id; if (old.created) d.created = old.created; updated++; } else added++;
-    await saveDeck(d);   // same deck id + same question ids = scores, mastery, and weak spots carry over
-  }
-  return {added, updated};
-}
-async function syncLocked(passphrase) {
-  const f = await lockedFile(); S.lockPending = false; S.lockHas = !!f; if (!f) return false;
-  const rec = await DB.get("kv", "locked-decks");
-  let raw = rec?.key ? b64ToBytes(rec.key) : null;
-  if (passphrase) raw = await deriveKey(passphrase, f);
-  if (!raw) { S.lockPending = true; return false; }
-  if (!passphrase && rec.hash === f.hash && rec.salt === f.kdf.salt) return false;   // already up to date
-  let bundle;
-  try { bundle = await openLocked(f, raw); }
-  catch (e) {
-    if (passphrase) { toast("That passphrase didn't work. Check it and try again.", true, 5000); S.lockPending = true; return false; }
-    await DB.del("kv", "locked-decks"); S.lockPending = true; return false;   // the passphrase was changed: ask again
-  }
-  const r = await applyLocked(bundle);
-  await DB.put("kv", {id: "locked-decks", key: bytesToB64(raw), hash: f.hash, salt: f.kdf.salt, at: Date.now()});
-  toast(passphrase ? `Unlocked: ${bundle.decks.length} built-in deck${bundle.decks.length > 1 ? "s" : ""} loaded.` : `Your built-in decks were updated${r.added ? ` (${r.added} new)` : ""}. Your progress is kept.`, false, 5000);
-  return true;
-}
-function lockCard() {
-  if (!S.lockPending || S.lockLater) return "";
-  return `<div class="card lockcard" style="margin-bottom:14px"><h2 style="margin-top:0">🔒 Unlock your built-in decks</h2>
-    <p class="muted" style="margin:0 0 10px">This app includes private decks. Enter your passphrase once on this device. After that they load and update automatically, and your progress is kept.</p>
-    <form id="unlockForm" class="row"><label class="vh" for="unlockPass">Passphrase</label>
-      <input id="unlockPass" type="password" autocomplete="current-password" autocapitalize="none" spellcheck="false" placeholder="Passphrase" style="flex:1;min-width:0">
-      <button class="btn primary" type="submit">Unlock</button><button class="btn ghost" type="button" data-act="lock-later">Not now</button></form></div>`;
+/* ============ BUILT-IN DECK LINKS ============
+   Decks listed in deck-links.json are offered on the Import tab as ready-made links (and a one-tap import),
+   so they're always at hand, even on a new device. */
+async function builtInDecks() {
+  if (!BRAND.builtInLinks || location.protocol === "file:") return [];
+  if (S.builtIn) return S.builtIn;
+  try { const r = await fetch(BRAND.builtInLinks); if (!r.ok) return []; const j = await r.json(); S.builtIn = (j.decks || []).map(x => parseJSONDeck(x)[0]); return S.builtIn; } catch (e) { return []; }
 }
 
 async function handleImportFiles(files) {
@@ -986,21 +939,23 @@ async function deckLink(d) {
   return app + "#import=" + bytesToB64url(gz);
 }
 function bytesToB64url(u) { let bin = ""; for (let i = 0; i < u.length; i += 8192) bin += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
-async function copyDeckLink(id, share) {
-  const d = S.decks.find(x => x.id === id); if (!d) return;
+async function copyDeckLink(id, share, deck) {
+  const d = deck || S.decks.find(x => x.id === id); if (!d) return;
   const link = await deckLink(d);
   if (share && navigator.share) { try { await navigator.share({title: d.title, text: `Deck link for ${d.title}. Open ${BRAND.name} from your Home Screen, go to Import, and tap Paste & import.`, url: link}); } catch (e) {} return; }
   try { await navigator.clipboard.writeText(link); toast(`Link copied for “${d.title}”. In the other copy of the app, go to Import and tap 📋 Paste & import.`, false, 6000); }
   catch (e) { openModal(`<h2>Deck link</h2><p class="muted">Select all, copy, then paste it in Import › Paste & import.</p><textarea readonly style="min-height:160px" onfocus="this.select()">${esc(link)}</textarea><div class="actions"><button class="btn" data-act="modal-close">Close</button></div>`); }
 }
 function deckLinksCard() {
-  const locked = S.lockPending && S.lockHas;
+  const bi = S.builtIn || [];
+  if (BRAND.builtInLinks && !S.builtIn) builtInDecks().then(x => { if (x.length && S.view === "import") render(); });
   return `<div class="card" style="margin-top:14px"><h2 style="margin-top:0">📎 Deck links</h2>
     <p class="muted" style="margin-top:0">Copy a link for any deck here, then paste it into <strong>Import › 📋 Paste & import</strong> in this app on another device, or in your Home Screen app if you opened the site in Safari. Each link holds the whole deck, so it works even when you can't reach a links page in the browser.</p>
     ${S.decks.length ? `<div class="dllist">${S.decks.map(d => `<div class="dlrow"><div class="dltxt"><strong>${esc(d.title)}</strong><span class="muted">${d.questions.length} questions</span></div>
       <div class="row"><button class="btn sm" data-act="deck-link" data-id="${d.id}">📋 Copy link</button>${navigator.share ? `<button class="btn sm" data-act="deck-share" data-id="${d.id}">📤 Share</button>` : ""}</div></div>`).join("")}</div>` : `<p class="muted">No decks on this device yet.</p>`}
-    ${locked ? `<p class="help">Your built-in decks are locked on this device. Unlock them on the Decks tab to get their links here.</p>` : ""}
-    <p class="help">Links for private decks show the questions to anyone who has them, so share them only with people you trust.</p></div>`;
+    ${bi.length ? `<h3 style="margin:16px 0 8px">Ready-made decks</h3><div class="dllist">${bi.map((d, i) => { const have = S.decks.some(x => x.title === d.title);
+      return `<div class="dlrow"><div class="dltxt"><strong>${esc(d.title)}</strong><span class="muted">${d.questions.length} questions${have ? " · on this device" : ""}</span></div>
+      <div class="row"><button class="btn sm" data-act="bi-link" data-i="${i}">📋 Copy link</button>${navigator.share ? `<button class="btn sm" data-act="bi-share" data-i="${i}">📤 Share</button>` : ""}<button class="btn sm primary" data-act="bi-add" data-i="${i}">${have ? "Update here" : "Add here"}</button></div></div>`; }).join("")}</div>` : ""}</div>`;
 }
 
 async function importFromLink(payload, fromAddressBar = true) {
@@ -1253,10 +1208,6 @@ async function aiGenerate(btn) {
 function renderSettings() {
   const st = S.settings, ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone, fileMode = location.protocol === "file:";
   return `<h1>Settings</h1>
-  ${BRAND.lockedDecks && S.lockHas ? `<div class="card"><h2>Built-in decks</h2>
-    <p class="muted">Private decks ship inside the app, locked with your passphrase. ${S.lockPending ? "They're locked on this device." : "They're unlocked on this device and update automatically with the app, keeping your progress."}</p>
-    <div class="row">${S.lockPending ? `<button class="btn primary" data-act="lock-show">🔒 Enter passphrase</button>` : `<button class="btn" data-act="lock-forget">Forget passphrase on this device</button>`}</div>
-    <p class="help">You can still add or update any deck with a deck link on the Import tab.</p></div>` : ""}
   <div class="card"><h2>Install for offline use</h2>
     ${standalone ? `<p class="pill ok">Installed ✓ and works offline.</p>` : fileMode
       ? `<p>You're running the <strong>single-file version</strong>. Keep this HTML file on your computer and open it any time, even offline. Export a backup now and then (below), because some browsers limit storage for local files.</p><p class="help">To install on iPhone or Android, open the hosted version (see the guide) and add it to your home screen.</p>`
@@ -1375,9 +1326,9 @@ const actions = {
   "wipe": async () => { if (await confirmBox("Erase everything?", "Deletes all decks, progress, library files, and settings on this device. Export a backup first if you might need anything.", "Erase all", true)) { for (const s of ["decks","progress","files","kv"]) await DB.clear(s); await loadAll(); applyBrand(); nav("decks"); toast("All data erased."); } },
   "deck-link": ds => copyDeckLink(ds.id, false),
   "deck-share": ds => copyDeckLink(ds.id, true),
-  "lock-later": () => { S.lockLater = true; render(); },
-  "lock-forget": async () => { if (await confirmBox("Forget the passphrase?", "The built-in decks and your progress stay. New versions won't load until you enter the passphrase again.", "Forget")) { await DB.del("kv", "locked-decks"); S.lockLater = false; await syncLocked(); render(); toast("Passphrase forgotten on this device."); } },
-  "lock-show": () => { S.lockLater = false; S.lockPending = true; nav("decks"); },
+  "bi-link": ds => copyDeckLink(null, false, S.builtIn[+ds.i]),
+  "bi-share": ds => copyDeckLink(null, true, S.builtIn[+ds.i]),
+  "bi-add": async ds => { const d = JSON.parse(JSON.stringify(S.builtIn[+ds.i])); d.id = uid("deck"); if (!(await reuseExisting([d]))) return; await importDecks([d], "the app"); },
   "install": async () => { if (S.deferredInstall) { S.deferredInstall.prompt(); await S.deferredInstall.userChoice; S.deferredInstall = null; render(); } }
 };
 document.addEventListener("click", e => {
@@ -1389,7 +1340,6 @@ document.addEventListener("click", e => {
 document.addEventListener("submit", async e => {
   e.preventDefault(); const f = e.target;
   if (f.id === "setupForm") startSession(f);
-  else if (f.id === "unlockForm") { const v = $("#unlockPass").value; if (!v.trim()) return; f.querySelector("button[type=submit]").disabled = true; if (await syncLocked(v)) { await loadAll(); applyBrand(); } render(); }
   else if (f.id === "qForm") saveQuestionForm(f);
   else if (f.id === "deckMetaForm") { const d = S.decks.find(x => x.id === S.editDeckId); d.title = $("#dTitle").value.trim() || "Untitled deck"; d.course = $("#dCourse").value.trim(); d.description = $("#dDesc").value.trim(); await saveDeck(d); toast("Deck details saved."); }
   else if (f.id === "noteForm") { const t = $("#nTitle").value.trim() || "Note"; const blob = new Blob([$("#nBody").value], {type: "text/markdown"}); await DB.put("files", {id: uid("file"), name: t.replace(/\.md$/i, "") + ".md", type: "text/markdown", size: blob.size, course: ($("#libCourse")?.value || S.settings.lastCourse || "").trim(), added: Date.now(), buf: await blob.arrayBuffer()}); closeModal(); render(); toast("Note saved."); }
@@ -1429,7 +1379,6 @@ window.addEventListener("beforeunload", e => { if (S.session && S.session.mode =
   }
   if (location.hash.startsWith("#import=")) { await importFromLink(location.hash.slice(8)); }
   else if (!S.decks.length && (location.hash === "#sample" || (BRAND.autoSeed && !(await DB.get("kv", "seeded"))))) { await DB.put("kv", {id: "seeded", at: Date.now()}); actions["load-sample"](); }
-  if (await syncLocked()) { await loadAll(); applyBrand(); render(); } else if (S.lockPending && S.view === "decks") render();
   // A link tapped while the app is already open only changes the #fragment (no reload), so listen for it too.
   window.addEventListener("hashchange", () => { if (location.hash.startsWith("#import=")) importFromLink(location.hash.slice(8)); });
 })();

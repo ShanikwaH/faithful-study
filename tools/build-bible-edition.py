@@ -167,6 +167,7 @@ html = rep(html, "\n</body>\n</html>", "\n<script src=\"bible-reader.js\"></scri
 
 sw = (BASE / "sw.js").read_text(encoding="utf-8")
 sw = rep(sw, 'const CACHE = "faithful-study-v', 'const CACHE = "bible-stories-v')
+sw = rep(sw, '"./deck-links.json", ', '')   # Faithful Study's ready-made D550 deck links stay out of the Bible edition
 sw = rep(sw, "/* Faithful Study service worker", "/* Bible Stories for All Ages service worker")
 sw = rep(sw, '"./manifest.webmanifest", ', '"./manifest.webmanifest", "./bible-reader.js", "./kjv.json", "./prayers.js", "./prayers.json", ')
 for f in ("bible-reader.js", "kjv.json", "prayers.js", "prayers.json"): shutil.copy(BASE / "tools" / "bible" / f, OUT / f)
