@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.2.5
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.0
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
@@ -15,6 +15,11 @@ This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and
   - **Your settings:** pick the reading speed, choose a voice, and set a sleep timer (15, 30, or 60 minutes, or the end of the chapter).
   - **Find your place again:** tap any verse number to read from there, read just that verse, or bookmark it. **Continue** picks up where you stopped, and **★ Bookmarks** keeps your saved verses.
   - **🎧 Narrated version:** on every chapter, **Narrated on Bible.com** opens that chapter's human-narrated KJV recording (*The Listener's Bible®: KJV Edition*, © 2007 Fellowship for the Performing Arts) in YouVersion's player. It needs internet and isn't stored in the app.
+  - **📅 Reading plans:** tap **Reading plans** on the Bible tab and pick one: **Bible in a year: Genesis to Revelation** (3 to 4 chapters a day), **Bible in a year: Old + New Testament daily** (2 to 3 Old Testament chapters plus about 20 New Testament verses), or **New Testament in 90 days**. Day 1 is the date you choose. Each day is sized to about the same listening time.
+    - **▶ Play day** reads that day's passages one after another with the verse highlighted, then checks the day off. If you stop partway, playing that day again picks up where you stopped.
+    - Tap a day's circle to mark it read or unread. Missed days stay open, and the plan shows how many days you have to catch up.
+    - Today's reading also shows on the Bible home screen.
+    - **Import a plan:** paste a `readingplan/v1` plan (made by the reading-plan skill or any AI) or a simple list with one day per line, such as `Genesis 1-3; Matthew 1`, then tap **Import plan** or **📋 Paste & import**.
   - **Better voices:** for the most natural voice on iPhone, go to **Settings › Accessibility › Spoken Content › Voices › English** and download an *Enhanced* or *Premium* voice. Then choose it in ⚙ Options.
 - **60 starter questions**, written from the King James Version, in three age tiers:
   - **Little Learners (ages 5–8):** 20 questions, 3 choices each, a hint on every card, and friendly explanations.

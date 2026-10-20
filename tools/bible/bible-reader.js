@@ -34,6 +34,8 @@
     screen: "home", book: 0, ch: 1, sel: null,           // sel = {v1, v2} within the open chapter, from a search
     prefs: {rate: 0.9, voiceURI: "", sleep: 0, scope: "chapter"},
     bookmarks: [], resume: null,
+    plans: {active: null, progress: {}, custom: []},     // reading plans: progress[id] = {start: "YYYY-MM-DD", done: {dayIndex: time}, pos}
+    planShowAll: false,
     play: {on: false, id: 0, pos: null, end: null, follow: true, sleepTimer: null, sleepAt: 0, lock: null, startCh: null}
   };
 
@@ -46,9 +48,9 @@
     return BR.loading;
   }
   async function loadState() {
-    try { const s = await DB.get("kv", "bible"); if (s) { Object.assign(BR.prefs, s.prefs || {}); BR.bookmarks = s.bookmarks || []; BR.resume = s.resume || null; } } catch (e) {}
+    try { const s = await DB.get("kv", "bible"); if (s) { Object.assign(BR.prefs, s.prefs || {}); BR.bookmarks = s.bookmarks || []; BR.resume = s.resume || null; if (s.plans) BR.plans = Object.assign({active: null, progress: {}, custom: []}, s.plans); } } catch (e) {}
   }
-  function saveState() { try { DB.put("kv", {id: "bible", prefs: BR.prefs, bookmarks: BR.bookmarks, resume: BR.resume}); } catch (e) {} }
+  function saveState() { try { DB.put("kv", {id: "bible", prefs: BR.prefs, bookmarks: BR.bookmarks, resume: BR.resume, plans: BR.plans}); } catch (e) {} }
   const books = () => BR.data.books;
   const bookName = b => books()[b].n;
   const chapters = b => books()[b].c;
@@ -141,11 +143,13 @@
       if (!on && BR.play.lock) { await BR.play.lock.release(); BR.play.lock = null; }
     } catch (e) {}
   }
-  function startPlayback(start, scope) {
+  function startPlayback(start, scope, opts) {
     if (!canSpeak) { toast("This browser can't read aloud. Try Safari on iPhone or Chrome on Android.", true, 6000); return; }
     speechSynthesis.cancel();
     const id = ++BR.play.id;
-    Object.assign(BR.play, {on: true, pos: start, end: planEnd(start, scope), follow: true, startCh: start.c, scope});
+    opts = opts || {};
+    Object.assign(BR.play, {on: true, pos: start, end: opts.end || planEnd(start, scope), follow: true, startCh: start.c, scope,
+      queue: opts.queue || [], planId: opts.planId || null, planDay: opts.planDay ?? null, seg: opts.seg || 0});
     clearTimeout(BR.play.sleepTimer); BR.play.sleepAt = 0;
     if (BR.prefs.sleep > 0) { BR.play.sleepAt = Date.now() + BR.prefs.sleep * 60000; BR.play.sleepTimer = setTimeout(() => { pausePlayback(); toast("Sleep timer: reading stopped."); }, BR.prefs.sleep * 60000); }
     wakeLock(true);
@@ -153,7 +157,9 @@
   }
   function readPos(p, first, id) {
     if (id !== BR.play.id) return;
-    BR.play.pos = p; BR.resume = {b: p.b, c: p.c, v: p.v}; saveState();
+    BR.play.pos = p; BR.resume = {b: p.b, c: p.c, v: p.v};
+    if (BR.play.planDay !== null) { const pr = BR.plans.progress[BR.play.planId]; if (pr) pr.pos = {day: BR.play.planDay, seg: BR.play.seg, b: p.b, c: p.c, v: p.v}; }
+    saveState();
     // follow along: show the chapter being read if the listener is on the reader
     if (S.view === "bible" && BR.play.follow && BR.screen === "read" && (BR.book !== p.b || BR.ch !== p.c)) {
       BR.book = p.b; BR.ch = p.c; BR.sel = null; render();   // afterRender highlights the verse
@@ -165,17 +171,36 @@
     const text = forSpeech(vText(verses(p.b, p.c)[p.v - 1]));
     speakChunks([...intro, ...chunks(text)], id, () => {
       const n = nextPos(p);
-      if (!n || cmp(n, BR.play.end) > 0) return finishPlayback();
+      if (!n || cmp(n, BR.play.end) > 0) return segmentDone(id);
       if (BR.prefs.sleep === -1 && n.c !== p.c) { finishPlayback(); toast("Sleep timer: end of chapter."); return; }
       readPos(n, false, id);
     });
+  }
+  // A plan day can have several passages (for example Psalm 1 and Matthew 1:1-17). Play them in order, then mark the day read.
+  function segmentDone(id) {
+    const P = BR.play;
+    if (P.queue && P.queue.length) {
+      const g = P.queue.shift(); P.seg++;
+      P.end = {b: g.b, c: g.c2, v: g.v2}; P.startCh = g.c1;
+      if (BR.prefs.sleep === -1) { finishPlayback(); toast("Sleep timer: end of chapter."); return; }
+      return readPos({b: g.b, c: g.c1, v: g.v1}, true, id);
+    }
+    const planId = P.planId, day = P.planDay;
+    finishPlayback();
+    if (day !== null && planId) {
+      const pr = BR.plans.progress[planId];
+      if (pr) { pr.done[day] = Date.now(); pr.pos = null; saveState(); }
+      toast(`Day ${day + 1} complete ✓`);
+      if (S.view === "bible" && BR.screen === "plans") render();
+    }
   }
   function pausePlayback(interrupted) {
     BR.play.id++; BR.play.on = false; clearTimeout(BR.play.sleepTimer);
     if (!interrupted && canSpeak) speechSynthesis.cancel();
     wakeLock(false); updateBar();
   }
-  function finishPlayback() { pausePlayback(); BR.play.pos = null; markReading(null); updateBar(); }
+  function finishPlayback() { pausePlayback(); BR.play.pos = null; BR.play.planDay = null; BR.play.planId = null; BR.play.queue = []; markReading(null); updateBar(); }
+  const resumeOpts = () => BR.play.planDay !== null ? {end: BR.play.end, queue: BR.play.queue, planId: BR.play.planId, planDay: BR.play.planDay, seg: BR.play.seg} : undefined;
   function markReading(p) {
     document.querySelectorAll(".kjv .vs.reading").forEach(e => e.classList.remove("reading"));
     if (p && BR.screen === "read" && BR.book === p.b && BR.ch === p.c) {
@@ -187,8 +212,9 @@
   function updateBar() {
     const st = document.getElementById("bpStatus"), btn = document.getElementById("bpPlay"); if (!st || !btn) return;
     const p = BR.play.pos;
-    st.textContent = BR.play.on && p ? `Reading ${ref(p.b, p.c, p.v)}` + (BR.play.sleepAt ? ` · stops in ${Math.max(1, Math.round((BR.play.sleepAt - Date.now()) / 60000))} min` : "")
-      : p ? `Paused at ${ref(p.b, p.c, p.v)}` : (BR.screen === "read" ? `${ref(BR.book, BR.ch)}${BR.sel ? ` · ${ref(BR.book, BR.ch, BR.sel.v1, BR.sel.v2).split(" ").pop()} selected` : ""}` : "Choose a book to start");
+    const dayTag = BR.play.planDay !== null && p ? `Day ${BR.play.planDay + 1} · ` : "";
+    st.textContent = dayTag + (BR.play.on && p ? `Reading ${ref(p.b, p.c, p.v)}` + (BR.play.sleepAt ? ` · stops in ${Math.max(1, Math.round((BR.play.sleepAt - Date.now()) / 60000))} min` : "")
+      : p ? `Paused at ${ref(p.b, p.c, p.v)}` : (BR.screen === "read" ? `${ref(BR.book, BR.ch)}${BR.sel ? ` · ${ref(BR.book, BR.ch, BR.sel.v1, BR.sel.v2).split(" ").pop()} selected` : ""}` : BR.screen === "plans" ? "Tap ▶ on a day to listen" : "Choose a book to start"));
     btn.innerHTML = BR.play.on ? "⏸<span class='vh'> Pause</span>" : "▶<span class='vh'> Play</span>";
     btn.setAttribute("aria-label", BR.play.on ? "Pause reading" : "Play: read aloud");
   }
@@ -212,7 +238,9 @@
       <div class="row" style="margin:12px 0">
         ${r ? `<button class="btn green" data-act="bresume">▶ Continue: ${esc(ref(r.b, r.c, r.v))}</button>` : ""}
         <button class="btn" data-act="bmarks">★ Bookmarks (${BR.bookmarks.length})</button>
+        <button class="btn" data-act="bplans">📅 Reading plans</button>
       </div>
+      ${todayCard()}
       <h2>Old Testament</h2>${bookGrid(0, NT_START)}
       <h2 style="margin-top:16px">New Testament</h2>${bookGrid(NT_START, books().length)}
       ${notice()}`;
@@ -263,7 +291,7 @@
   async function renderBible() {
     if (!BR.stateLoaded && DB.db !== null) { await loadState(); BR.stateLoaded = true; }   // the app's database opens at boot, after this file loads
     try { await loadData(); } catch (e) { return `<div class="card"><h1>Holy Bible</h1><p class="muted">${esc(BR.error)}</p></div>`; }
-    const body = BR.screen === "read" ? viewRead() : BR.screen === "chapters" ? viewChapters() : viewHome();
+    const body = BR.screen === "read" ? viewRead() : BR.screen === "chapters" ? viewChapters() : BR.screen === "plans" ? viewPlans() : viewHome();
     return body + playerBar();
   }
   EXTRA_VIEWS.bible = renderBible;
@@ -275,6 +303,152 @@
     BR.jumpTo = null;
   });
 
+
+  /* ---------- reading plans (Bible in a year, OT + NT daily, NT in 90 days, or imported) ---------- */
+  // A reading is a passage {b, c1, v1, c2, v2} inside one book. A plan day is a list of readings.
+  const lastV = (b, c) => verses(b, c).length;
+  const DAY_MS = 86400000;
+  const today0 = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); };
+  const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const parseDay = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const fmtDay = d => d.toLocaleDateString(undefined, {weekday: "short", month: "short", day: "numeric"});
+  function allChapters(fromB, toB) { const out = []; for (let b = fromB; b < toB; b++) chapters(b).forEach((ch, i) => out.push({b, c: i + 1, n: ch.v.length})); return out; }
+  // Whole chapters, split so every day has about the same number of verses (about the same listening time).
+  function splitChapters(list, days) {
+    const total = list.reduce((a, x) => a + x.n, 0), out = []; let i = 0, cum = 0;
+    for (let d = 0; d < days; d++) {
+      const day = [], target = total * (d + 1) / days, daysLeft = days - d - 1;
+      while (i < list.length && (d === days - 1 || !day.length || (cum + list[i].n / 2 <= target && list.length - i > daysLeft))) { day.push(list[i]); cum += list[i].n; i++; }
+      out.push(day);
+    }
+    return out.map(groupChapters);
+  }
+  function groupChapters(chs) {   // consecutive chapters of one book -> one reading
+    const out = [];
+    chs.forEach(x => { const g = out[out.length - 1]; if (g && g.b === x.b && g.c2 === x.c - 1) { g.c2 = x.c; g.v2 = lastV(x.b, x.c); } else out.push({b: x.b, c1: x.c, v1: 1, c2: x.c, v2: lastV(x.b, x.c)}); });
+    return out;
+  }
+  // Verse-level split for short daily portions (New Testament every day): breaks at the paragraph nearest the target.
+  function splitVerses(fromB, toB, days) {
+    const vs = [];
+    for (let b = fromB; b < toB; b++) chapters(b).forEach((ch, ci) => ch.v.forEach((x, vi) => vs.push({b, c: ci + 1, v: vi + 1, br: vi === 0 || vPara(x)})));
+    const cuts = [0];
+    for (let d = 1; d < days; d++) {
+      const t = Math.round(vs.length * d / days); let best = t;
+      for (let k = 0; k <= 8; k++) { if (vs[t + k]?.br) { best = t + k; break; } if (vs[t - k]?.br && t - k > cuts[cuts.length - 1]) { best = t - k; break; } }
+      cuts.push(Math.max(best, cuts[cuts.length - 1] + 1));
+    }
+    cuts.push(vs.length);
+    return cuts.slice(0, -1).map((a, d) => {
+      const out = [];
+      vs.slice(a, cuts[d + 1]).forEach(x => { const g = out[out.length - 1]; if (g && g.b === x.b) { g.c2 = x.c; g.v2 = x.v; } else out.push({b: x.b, c1: x.c, v1: x.v, c2: x.c, v2: x.v}); });
+      return out;
+    });
+  }
+  const BUILT_IN = [
+    {id: "gen-rev", title: "Bible in a year: Genesis to Revelation", description: "The whole Bible in order, 3 to 4 chapters a day. Each day is about the same length.", make: () => splitChapters(allChapters(0, books().length), 365)},
+    {id: "ot-nt", title: "Bible in a year: Old + New Testament daily", description: "Every day has an Old Testament reading (about 2 to 3 chapters) and a New Testament reading (about 20 verses).",
+      make: () => { const ot = splitChapters(allChapters(0, NT_START), 365), nt = splitVerses(NT_START, books().length, 365); return ot.map((d, i) => d.concat(nt[i])); }},
+    {id: "nt-90", title: "New Testament in 90 days", description: "Matthew to Revelation, about 3 chapters a day. A good first plan.", make: () => splitChapters(allChapters(NT_START, books().length), 90)}
+  ];
+  const planCache = {};
+  function planDef(id) {
+    if (planCache[id]) return planCache[id];
+    const bi = BUILT_IN.find(p => p.id === id);
+    if (bi) return planCache[id] = {id, title: bi.title, description: bi.description, days: bi.make()};
+    const c = BR.plans.custom.find(p => p.id === id); if (!c) return null;
+    return planCache[id] = {id, title: c.title, description: c.description || "", custom: true, days: c.days.map(day => day.flatMap(refToReadings))};
+  }
+  function refToReadings(str) {   // "Genesis 1-3", "Psalm 23", "John 3:16-4:2", "Jude"; several can be joined with ";"
+    return String(str).split(/;|\s+and\s+/i).map(x => x.trim()).filter(Boolean).flatMap(x => {
+      const r = parseRef(x); if (r.error) throw new Error(`“${x}”: ${r.error}`);
+      return [{b: r.b, c1: r.c1, v1: r.v1 || 1, c2: r.c2, v2: r.v2 || lastV(r.b, r.c2)}];
+    });
+  }
+  function readingLabel(g) {
+    const whole1 = g.v1 === 1, wholeEnd = g.v2 === lastV(g.b, g.c2);
+    if (g.c1 === g.c2) return whole1 && wholeEnd ? `${chapName(g.b)} ${g.c1}` : `${chapName(g.b)} ${g.c1}:${g.v1}–${g.v2}`;
+    const nm = chapters(g.b).length === g.c2 - g.c1 + 1 && whole1 && wholeEnd ? bookName(g.b) : null;
+    if (nm) return nm;
+    return whole1 && wholeEnd ? `${bookName(g.b)} ${g.c1}–${g.c2}` : `${bookName(g.b)} ${g.c1}:${g.v1}–${g.c2}:${g.v2}`;
+  }
+  const dayLabel = day => day.map(readingLabel).join(" · ");
+  function planStatus(id) {
+    const P = planDef(id), pr = BR.plans.progress[id]; if (!P || !pr) return null;
+    const n = P.days.length, doneN = Object.keys(pr.done).length;
+    const todayIdx = Math.min(n - 1, Math.max(0, Math.floor((today0() - parseDay(pr.start)) / DAY_MS)));
+    let next = 0; while (next < n && pr.done[next]) next++;
+    let behind = 0; for (let i = 0; i < todayIdx; i++) if (!pr.done[i]) behind++;
+    return {P, pr, n, doneN, todayIdx, next, behind, finished: doneN >= n};
+  }
+  function todayCard() {
+    const id = BR.plans.active; if (!id) return "";
+    const st = planStatus(id); if (!st) return "";
+    if (st.finished) return `<div class="card bplancard"><strong>🎉 You finished ${esc(st.P.title)}!</strong> <button class="btn sm" data-act="bplans">Choose another plan</button></div>`;
+    const d = st.next;
+    return `<div class="card bplancard"><div class="row between"><strong>📅 ${esc(st.P.title)}</strong><span class="pill">Day ${d + 1} of ${st.n}</span></div>
+      <p style="margin:6px 0 10px">${esc(dayLabel(st.P.days[d]))}</p>
+      <div class="row"><button class="btn green" data-act="bpday" data-d="${d}">▶ Play day ${d + 1}</button><button class="btn" data-act="bplans">Open plan</button></div>
+      ${st.behind ? `<p class="help" style="margin:8px 0 0">${st.behind} day${st.behind > 1 ? "s" : ""} to catch up. Keep going at your own pace.</p>` : ""}</div>`;
+  }
+  function viewPlans() {
+    const id = BR.plans.active, st = id ? planStatus(id) : null;
+    let html = `<div class="row between" style="margin-bottom:10px"><button class="btn sm" data-act="bhome">← Books</button><h1 style="margin:0">Reading plans</h1><span></span></div>`;
+    if (st) {
+      const p = Math.round(st.doneN / st.n * 100), start = parseDay(st.pr.start);
+      const from = BR.planShowAll ? 0 : Math.max(0, Math.min(st.next, st.todayIdx) - 2), to = BR.planShowAll ? st.n : Math.min(st.n, Math.max(st.next, st.todayIdx) + 12);
+      const rows = [];
+      for (let i = from; i < to; i++) {
+        const done = !!st.pr.done[i], isToday = i === st.todayIdx;
+        rows.push(`<li class="bday ${done ? "done" : ""} ${isToday ? "today" : ""}">
+          <button class="bcheck" data-act="bpdone" data-d="${i}" aria-pressed="${done}" aria-label="Day ${i + 1} ${done ? "read. Tap to mark unread" : "not read yet. Tap to mark read"}">${done ? "✓" : ""}</button>
+          <div class="bdaytxt"><b>Day ${i + 1}</b> <span class="muted">${fmtDay(new Date(start.getTime() + i * DAY_MS))}${isToday ? " · today" : ""}</span><br><button class="blink" data-act="bpopen" data-d="${i}">${esc(dayLabel(st.P.days[i]))}</button></div>
+          <button class="btn sm" data-act="bpday" data-d="${i}" aria-label="Play day ${i + 1}">▶</button></li>`);
+      }
+      html += `<div class="card"><div class="row between"><h2 style="margin:0">${esc(st.P.title)}</h2><span class="pill">${st.doneN} of ${st.n} days</span></div>
+        <p class="muted" style="margin:6px 0">${esc(st.P.description)}</p>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p}" aria-label="Plan progress ${p}%"><i style="width:${p}%"></i></div>
+        <p style="margin:10px 0">${st.finished ? "🎉 Plan complete. Well done, good and faithful reader!" : st.behind ? `You have <strong>${st.behind}</strong> day${st.behind > 1 ? "s" : ""} to catch up. Missed days stay open, so just keep going.` : "You're on track."}</p>
+        <div class="row">${st.finished ? "" : `<button class="btn green" data-act="bpday" data-d="${st.next}">▶ Play day ${st.next + 1}</button>`}
+          <button class="btn sm" data-act="bpstart" data-id="${esc(id)}">Change start date</button></div>
+        <ol class="bdays">${rows.join("")}</ol>
+        <button class="btn sm ghost" data-act="bpall">${BR.planShowAll ? "Show fewer days" : `Show all ${st.n} days`}</button></div>`;
+    }
+    const all = [...BUILT_IN.map(b => ({id: b.id, title: b.title, description: b.description})), ...BR.plans.custom.map(c => ({id: c.id, title: c.title, description: c.description, custom: true, n: c.days.length}))];
+    html += `<h2 style="margin-top:18px">${st ? "Other plans" : "Choose a plan"}</h2><div class="grid">${all.filter(x => x.id !== id).map(x => {
+      const pr = BR.plans.progress[x.id], dn = pr ? Object.keys(pr.done).length : 0;
+      return `<div class="card"><h3 style="margin-top:0">${esc(x.title)}</h3><p class="muted" style="font-size:.9rem">${esc(x.description || "")}${x.custom ? ` (${x.n} days, imported)` : ""}</p>
+        <div class="row"><button class="btn primary sm" data-act="${pr ? "bpswitch" : "bpstart"}" data-id="${esc(x.id)}">${pr ? `Continue (${dn} days read)` : "Start this plan"}</button>
+        ${x.custom ? `<button class="btn sm ghost" data-act="bpdel" data-id="${esc(x.id)}">Remove</button>` : ""}</div></div>`; }).join("")}</div>
+      <div class="card" style="margin-top:14px"><h2 style="margin-top:0">Import a plan</h2>
+        <p class="muted" style="font-size:.9rem">Paste a <code>readingplan/v1</code> plan from the reading-plan skill or any AI, or a simple list with one day per line, such as <code>Genesis 1-3; Matthew 1</code>.</p>
+        <label class="vh" for="bpText">Plan to import</label><textarea id="bpText" style="min-height:110px" placeholder='{"format":"readingplan/v1","plan":{"title":"Psalms in 30 days","days":[["Psalm 1-5"],["Psalm 6-10"]]}}'></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary" data-act="bpimport">Import plan</button><button class="btn" data-act="bpclip">📋 Paste & import</button></div></div>
+      ${notice()}`;
+    return html;
+  }
+  function importPlan(text) {
+    text = String(text || "").trim(); if (!text) { toast("Paste a plan first.", true); return; }
+    let title = "", description = "", days;
+    try {
+      if (/^[\[{]/.test(text)) {
+        const j = JSON.parse(text), pl = j.plan || j;
+        if (j.format && j.format !== "readingplan/v1") throw new Error("This isn't a readingplan/v1 file.");
+        title = pl.title || ""; description = pl.description || ""; days = (pl.days || []).map(d => Array.isArray(d) ? d : d.readings || [d]);
+      } else {
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length && !/\d/.test(lines[0]) && !/^(jude|obadiah|philemon|2 ?john|3 ?john)\b/i.test(lines[0])) title = lines.shift();
+        days = lines.map(l => [l.replace(/^(day\s*)?\d+\s*[:.)\-–]\s*/i, "")]);
+      }
+      if (!days.length) throw new Error("No days found.");
+      days.forEach((d, i) => d.forEach(x => { try { refToReadings(x); } catch (e) { throw new Error(`Day ${i + 1}, ${e.message}`); } }));
+    } catch (e) { toast("Couldn't import that plan. " + e.message, true, 8000); return; }
+    const id = "custom-" + Date.now().toString(36);
+    BR.plans.custom.push({id, title: title || `My reading plan (${days.length} days)`, description, days});
+    saveState(); toast(`Imported “${title || "your plan"}” (${days.length} days).`);
+    actions.bpstart({id});
+  }
+
   /* ---------- actions ---------- */
   function openChapter(b, c, sel, jump) {
     if (BR.range && (BR.range.b !== b || c < BR.range.c1 || c > BR.range.c2)) BR.range = null;
@@ -284,6 +458,35 @@
   }
   const scopeStart = () => BR.sel ? {b: BR.book, c: BR.ch, v: BR.sel.v1} : {b: BR.book, c: BR.ch, v: 1};
   Object.assign(actions, {
+    bplans: () => { BR.screen = "plans"; render(); window.scrollTo(0, 0); },
+    bpall: () => { BR.planShowAll = !BR.planShowAll; render(); },
+    bpstart: d => {
+      const P = planDef(d.id); if (!P) return; const pr = BR.plans.progress[d.id];
+      openModal(`<h2>${esc(P.title)}</h2><p class="muted">${P.days.length} days. Day 1 is the date you choose. Miss a day? It stays open so you can catch up.</p>
+        <div class="field"><label for="bpDate">Start date (Day 1)</label><input id="bpDate" type="date" value="${pr ? pr.start : isoDay(today0())}"></div>
+        <div class="actions"><button class="btn" data-act="modal-close" data-val="0">Cancel</button>${pr ? `<button class="btn danger" data-act="bpreset" data-id="${esc(d.id)}">Start over</button>` : ""}<button class="btn primary" data-act="bpgo" data-id="${esc(d.id)}">${pr ? "Save" : "Start plan"}</button></div>`);
+    },
+    bpgo: d => {
+      const v = $("#bpDate")?.value || isoDay(today0()); const pr = BR.plans.progress[d.id];
+      if (pr) pr.start = v; else BR.plans.progress[d.id] = {start: v, done: {}, pos: null};
+      BR.plans.active = d.id; saveState(); closeModal(false); BR.screen = "plans"; render(); window.scrollTo(0, 0);
+    },
+    bpreset: async d => { closeModal(false); if (await confirmBox("Start over?", "Clears the days you've marked read in this plan.", "Start over", true)) { BR.plans.progress[d.id] = {start: isoDay(today0()), done: {}, pos: null}; BR.plans.active = d.id; saveState(); render(); } },
+    bpswitch: d => { BR.plans.active = d.id; saveState(); render(); window.scrollTo(0, 0); },
+    bpdel: async d => { if (!(await confirmBox("Remove plan?", "Removes this imported plan and its progress from this device.", "Remove", true))) return; BR.plans.custom = BR.plans.custom.filter(x => x.id !== d.id); delete BR.plans.progress[d.id]; delete planCache[d.id]; if (BR.plans.active === d.id) BR.plans.active = null; saveState(); render(); },
+    bpdone: d => { const pr = BR.plans.progress[BR.plans.active]; if (!pr) return; const i = +d.d; if (pr.done[i]) delete pr.done[i]; else pr.done[i] = Date.now(); saveState(); render(); },
+    bpopen: d => { const g = planDef(BR.plans.active).days[+d.d][0]; const whole = g.v1 === 1 && (g.c1 !== g.c2 || g.v2 === lastV(g.b, g.c1)); openChapter(g.b, g.c1, whole ? null : {v1: g.v1, v2: g.c1 === g.c2 ? g.v2 : lastV(g.b, g.c1)}, whole ? null : g.v1); },
+    bpday: d => {
+      const id = BR.plans.active, P = planDef(id), i = +d.d; if (!P) return;
+      const pr = BR.plans.progress[id], segs = P.days[i].map(g => ({...g}));
+      let seg = 0, start = {b: segs[0].b, c: segs[0].c1, v: segs[0].v1};
+      if (pr.pos && pr.pos.day === i && segs[pr.pos.seg]) { seg = pr.pos.seg; start = {b: pr.pos.b, c: pr.pos.c, v: pr.pos.v}; }   // pick up where you stopped
+      const cur = segs[seg];
+      openChapter(start.b, start.c, null, start.v);
+      startPlayback(start, "plan", {end: {b: cur.b, c: cur.c2, v: cur.v2}, queue: segs.slice(seg + 1), planId: id, planDay: i, seg});
+    },
+    bpimport: () => importPlan($("#bpText")?.value),
+    bpclip: async () => { let t = ""; try { t = await navigator.clipboard.readText(); } catch (e) { toast("Your browser didn't allow reading the clipboard. Long-press the box, tap Paste, then tap Import plan.", true, 8000); $("#bpText")?.focus(); return; } importPlan(t); },
     bbook: d => { BR.book = +d.b; BR.screen = chapters(+d.b).length === 1 ? "read" : "chapters"; BR.ch = 1; BR.sel = null; render(); window.scrollTo(0, 0); },
     bch: d => openChapter(BR.book, +d.c),
     bgoto: d => openChapter(+d.b, +d.c),
@@ -293,7 +496,7 @@
     bplaybook: () => { BR.screen = "read"; BR.ch = 1; BR.sel = null; render(); startPlayback({b: BR.book, c: 1, v: 1}, "book"); },
     bplay: () => {
       if (BR.play.on) return pausePlayback();
-      if (BR.play.pos && !(BR.screen === "read" && (BR.play.pos.b !== BR.book || BR.play.pos.c !== BR.ch))) return startPlayback(BR.play.pos, BR.play.scope || BR.prefs.scope);
+      if (BR.play.pos && !(BR.screen === "read" && (BR.play.pos.b !== BR.book || BR.play.pos.c !== BR.ch))) return startPlayback(BR.play.pos, BR.play.scope || BR.prefs.scope, resumeOpts());
       if (BR.screen !== "read") { const r = BR.resume; if (r) return actions.bresume(); toast("Choose a book and chapter first."); return; }
       const scope = BR.sel && BR.prefs.scope === "chapter" ? "selection" : BR.prefs.scope === "selection" && !BR.sel ? "chapter" : BR.prefs.scope;
       startPlayback(scopeStart(), scope);
@@ -338,7 +541,7 @@
     bsaveopts: () => {
       BR.prefs.scope = $("#bScope").value; BR.prefs.rate = +$("#bRate").value; BR.prefs.voiceURI = $("#bVoice").value; BR.prefs.sleep = +$("#bSleep").value;
       saveState(); closeModal(false); toast("Reading options saved.");
-      if (BR.play.on && BR.play.pos) startPlayback(BR.play.pos, BR.play.scope);   // apply new speed/voice/timer right away
+      if (BR.play.on && BR.play.pos) startPlayback(BR.play.pos, BR.play.scope, resumeOpts());   // apply new speed/voice/timer right away
       else updateBar();
     }
   });
@@ -397,6 +600,15 @@
 .bpmain{min-width:76px!important}
 .bspacer{height:120px}
 body:has(.bplayer) #toast{bottom:calc(118px + env(safe-area-inset-bottom))}
+.bplancard{margin:0 0 14px}
+.bdays{list-style:none;padding:0;margin:12px 0;display:grid;gap:6px}
+.bday{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.bday.today{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.bday.done .bdaytxt{opacity:.7}
+.bcheck{flex:none;width:34px;height:34px;border-radius:50%;border:2px solid var(--border);background:var(--surface);color:#fff;font-weight:700;cursor:pointer}
+.bday.done .bcheck{background:var(--ok);border-color:var(--ok)}
+.bdaytxt{flex:1;min-width:0;font-size:.92rem}
+.blink{background:none;border:0;padding:2px 0;color:var(--accent);font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .bmlist{display:grid;gap:6px}
 .bmitem{display:flex;gap:6px;align-items:stretch}
 .bmgo{flex:1;flex-direction:column;align-items:flex-start;text-align:left;gap:2px;min-width:0}
@@ -407,5 +619,5 @@ body:has(.bplayer) #toast{bottom:calc(118px + env(safe-area-inset-bottom))}
 
   /* ---------- start ---------- */
   if (canSpeak && "onvoiceschanged" in speechSynthesis) speechSynthesis.addEventListener("voiceschanged", () => {});
-  window.BibleReader = {parseRef: q => (BR.data ? parseRef(q) : null), state: BR, load: loadData};
+  window.BibleReader = {parseRef: q => (BR.data ? parseRef(q) : null), state: BR, load: loadData, planDef: id => (BR.data ? planDef(id) : null), dayLabel, importPlan};
 })();

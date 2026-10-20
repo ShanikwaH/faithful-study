@@ -200,9 +200,11 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.2.5",
+  version: "1.3.0",
   // Wording that changes per edition
   examLabel: "Timed exam",
+  // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
+  realExam: {label: "Exam simulation", count: 40, minutes: 60, retestSecs: 90},
   correctMsg: "Correct!",
   courseWord: "Course",
   courseExample: "e.g., WGU D550",
@@ -516,6 +518,7 @@ function renderDecks() {
       <div class="row">
         <button class="btn primary sm" data-act="setup" data-id="${d.id}" data-mode="practice">Practice</button>
         <button class="btn sm" data-act="setup" data-id="${d.id}" data-mode="exam">${esc(BRAND.examLabel)}</button>
+        ${BRAND.realExam ? `<button class="btn sm" data-act="setup" data-id="${d.id}" data-mode="real">${esc(BRAND.realExam.label)} <span class="muted">(${Math.min(BRAND.realExam.count, s.total)} Q · ${realMinutes(s.total)} min)</span></button>` : ""}
         <button class="btn sm" data-act="setup" data-id="${d.id}" data-mode="flash">Flashcards</button>
         <button class="btn sm green" data-act="weak" data-id="${d.id}" ${s.weak ? "" : "disabled"}>Weak spots (${s.weak})</button>
       </div></div>`;
@@ -529,6 +532,7 @@ function renderDecks() {
 function openSetup(deckId, mode, weakOnly = false) {
   const d = S.decks.find(x => x.id === deckId); if (!d) return;
   if (!d.questions.length) { toast("This deck has no questions yet. Add some in Edit questions."); return; }
+  if (mode === "real") return openRealSetup(d);
   const topics = [...new Set(d.questions.map(q => q.topic))];
   const n = d.questions.length, label = {practice: "Practice", exam: BRAND.examLabel, flash: "Flashcards"}[mode];
   openModal(`<h2>${label}: ${esc(d.title)}</h2>
@@ -559,6 +563,39 @@ function startSession(form) {
   S.view = "session"; render(); window.scrollTo(0, 0);
 }
 
+/* ============ EXAM SIMULATION (like the real test) ============ */
+// Up to 40 questions in 60 minutes. Smaller decks keep the same pace (90 seconds a question).
+const realMinutes = n => { const R = BRAND.realExam; return n >= R.count ? R.minutes : Math.max(1, Math.round(R.minutes * n / R.count)); };
+// Draw from every topic in proportion to its share of the deck (largest-remainder rounding), then shuffle.
+function balancedDraw(qs, k) {
+  if (qs.length <= k) return shuffle(qs);
+  const groups = {}; qs.forEach(q => (groups[q.topic] ||= []).push(q));
+  const quota = Object.keys(groups).map(t => { const exact = groups[t].length * k / qs.length; return {t, exact, n: Math.floor(exact)}; });
+  let left = k - quota.reduce((a, x) => a + x.n, 0);
+  quota.sort((a, b) => (b.exact - b.n) - (a.exact - a.n) || Math.random() - .5);
+  for (let i = 0; left > 0; i++, left--) quota[i % quota.length].n++;
+  return shuffle(quota.flatMap(x => shuffle(groups[x.t]).slice(0, x.n)));
+}
+function openRealSetup(d) {
+  const R = BRAND.realExam, n = d.questions.length, cnt = Math.min(R.count, n), mins = realMinutes(n), topics = new Set(d.questions.map(q => q.topic)).size;
+  openModal(`<h2>${esc(R.label)}: ${esc(d.title)}</h2>
+    <p><strong>${cnt} questions · ${mins} minutes</strong>, set up like the real exam.</p>
+    <ul class="help" style="padding-left:20px;line-height:1.6">
+      <li>Questions come from ${topics > 1 ? `all ${topics} topics in proportion` : "the whole deck"}, in random order.</li>
+      <li>No hints, explanations, or right/wrong marks until you submit.</li>
+      <li>Flag questions and jump between them with <strong>Questions</strong>. Unanswered questions count as wrong. At 0:00 the exam submits itself.</li>
+      <li>Afterward you get your grade, a topic breakdown, every explanation and source, and a timed retest of what you missed.</li></ul>
+    ${n < R.count ? `<p class="help">This deck has ${n} questions, so the clock is set to the same pace: ${mins} minutes.</p>` : ""}
+    <div class="actions"><button type="button" class="btn" data-act="modal-close">Cancel</button><button class="btn primary" data-act="start-real" data-id="${d.id}">Start exam</button></div>`);
+}
+function startReal(d, qs, secs, retest) {
+  closeModal();
+  S.session = {deckId: d.id, deckTitle: d.title, mode: "exam", real: true, retest: !!retest, qs: qs.map(q => ({...q})), i: 0, ans: {}, checked: {}, flags: {}, hints: {},
+    start: Date.now(), limit: secs, ended: false, flipped: false, known: 0, again: 0};
+  S.view = "session"; render(); window.scrollTo(0, 0);
+}
+const sessLabel = x => x.real ? esc(BRAND.realExam?.label || BRAND.examLabel) + (x.retest ? " · retest of missed" : "") : x.mode === "exam" ? esc(BRAND.examLabel) : "Practice";
+
 /* ============ SESSION VIEW ============ */
 function renderSession() {
   const s = S.session; if (!s) return renderDecks();
@@ -578,12 +615,12 @@ function renderSession() {
   }
   const answered = Object.keys(s.ans).filter(k => s.ans[k]?.length).length;
   const top = s.mode === "exam"
-    ? `<div class="row between"><div><strong>${esc(s.deckTitle)}</strong><div class="muted" style="font-size:.85rem">${esc(BRAND.examLabel)} · ${answered}/${s.qs.length} answered</div></div>
+    ? `<div class="row between"><div><strong>${esc(s.deckTitle)}</strong><div class="muted" style="font-size:.85rem">${sessLabel(s)} · ${answered}/${s.qs.length} answered</div></div>
         <div class="row"><span class="timer" id="timer">--:--</span><button class="btn sm" data-act="exam-grid">Questions</button><button class="btn sm primary" data-act="submit-exam">Submit</button></div></div>`
     : `<div class="row between"><div><strong>${esc(s.deckTitle)}</strong><div class="muted" style="font-size:.85rem">Practice · instant feedback</div></div><button class="btn sm" data-act="end-practice">Finish</button></div>`;
   return `<div class="card">${top}
     <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct(s.i + 1, s.qs.length)}" aria-label="Progress" style="margin-top:12px"><i style="width:${pct(s.i + 1, s.qs.length)}%"></i></div>
-    <div class="q-meta"><span class="pill">Question ${s.i + 1} of ${s.qs.length}</span><span class="pill">${esc(q.topic)}</span>${multi ? `<span class="pill warn">Select ${q.answer.length}</span>` : ""}${(q.tags || []).includes("weak-spot") ? `<span class="pill bad">★ weak spot</span>` : ""}
+    <div class="q-meta"><span class="pill">Question ${s.i + 1} of ${s.qs.length}</span>${s.real ? "" : `<span class="pill">${esc(q.topic)}</span>`}${multi ? `<span class="pill warn">Select ${q.answer.length}</span>` : ""}${!s.real && (q.tags || []).includes("weak-spot") ? `<span class="pill bad">★ weak spot</span>` : ""}
       ${canSpeak ? `<button class="btn sm ghost" data-act="speak" aria-label="Read question aloud">🔊 Read aloud</button>` : ""}
       ${s.mode === "exam" ? `<button class="btn sm ghost" data-act="flag" aria-pressed="${!!s.flags[q.id]}">${s.flags[q.id] ? "⚑ Flagged" : "⚐ Flag"}</button>` : ""}</div>
     <div class="q-prompt">${esc(q.prompt)}</div>
@@ -647,7 +684,8 @@ function finishSession() {
   else graded = items.filter(it => s.checked[it.q.id]);
   const correct = graded.filter(i => i.ok).length, total = s.mode === "exam" ? items.length : graded.length;
   const byTopic = {}; graded.forEach(it => { const t = byTopic[it.q.topic] || (byTopic[it.q.topic] = {right: 0, total: 0}); t.total++; if (it.ok) t.right++; });
-  const result = {date: Date.now(), mode: s.mode, correct, total, pct: pct(correct, total), secs: Math.round((Date.now() - s.start) / 1000), byTopic};
+  const result = {date: Date.now(), mode: s.mode, correct, total, pct: pct(correct, total), secs: Math.min(s.limit || Infinity, Math.round((Date.now() - s.start) / 1000)), byTopic};
+  if (s.real) Object.assign(result, {real: true, retest: s.retest, limit: s.limit});
   if (total) { getProg(s.deckId).attempts.push(result); saveProg(s.deckId); }
   S.lastResult = {...result, items: s.mode === "exam" ? items : graded, deckId: s.deckId, deckTitle: d?.title || s.deckTitle, filter: "all"};
   S.session = null; S.view = "results"; render(); window.scrollTo(0, 0);
@@ -657,7 +695,7 @@ function finishSession() {
 function renderResults() {
   const r = S.lastResult; if (!r) return renderDecks();
   if (!r.total) return `<div class="card empty"><h2>No answers recorded</h2><p class="muted">Answer at least one question to see results.</p><button class="btn primary" data-act="nav" data-view="decks">Back to decks</button></div>`;
-  const pass = r.pct >= S.settings.passPct;
+  const pass = r.pct >= S.settings.passPct, missed = r.items.filter(it => !it.ok).length;
   const bars = Object.entries(r.byTopic).sort((a, b) => a[1].right / a[1].total - b[1].right / b[1].total).map(([t, v]) => barRow(t, v.right, v.total)).join("");
   const list = r.items.filter(it => r.filter === "all" || (r.filter === "wrong" && !it.ok) || (r.filter === "flag" && it.flag));
   const review = list.map(it => {
@@ -665,15 +703,17 @@ function renderResults() {
     const opts = q.options.map((o, j) => { const c = q.answer.includes(o.id) ? "correct" : it.sel.includes(o.id) ? "wrong" : ""; return `<div class="opt ${c}" style="cursor:default"><span class="key">${LETTERS[j]}</span><span>${esc(o.text)}${it.sel.includes(o.id) ? " <em class='muted'>(your answer)</em>" : ""}</span></div>`; }).join("");
     return `<details ${it.ok ? "" : "open"}><summary>${it.ok ? "✅" : "❌"} Q${k}. ${esc(q.prompt.slice(0, 110))}${q.prompt.length > 110 ? "…" : ""}</summary>
       <div class="q-prompt" style="margin-top:10px">${esc(q.prompt)}</div><div class="opts">${opts}</div>
+      ${r.real && q.hint ? `<p class="help" style="margin:8px 0 0">💡 Hint: ${esc(q.hint)}</p>` : ""}
       ${q.explanation ? `<div class="feedback"><p style="white-space:pre-wrap;margin:0">${esc(q.explanation)}</p>${q.sources.length ? `<ul class="sources">${q.sources.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>` : ""}</details>`;
   }).join("");
   return `<div class="card" style="text-align:center">
-      <p class="muted" style="margin:0">${esc(r.deckTitle)} · ${r.mode === "exam" ? esc(BRAND.examLabel) : "Practice"} · ${fmtTime(r.secs)}</p>
+      <p class="muted" style="margin:0">${esc(r.deckTitle)} · ${sessLabel(r)} · ${fmtTime(r.secs)}${r.real ? ` of ${fmtTime(r.limit)}` : ""}</p>
       <div class="score-ring" style="color:${pass ? "var(--ok)" : "var(--bad)"}">${r.pct}%</div>
       <p><strong>${r.correct} of ${r.total} correct</strong> · ${pass ? "At or above" : "Below"} your ${S.settings.passPct}% target</p>
       <div class="row" style="justify-content:center">
+        ${r.real && missed ? `<button class="btn primary" data-act="retest-missed">Retest what I missed (${missed} · ${Math.ceil(missed * BRAND.realExam.retestSecs / 60)} min)</button>` : ""}
         <button class="btn green" data-act="weak" data-id="${r.deckId}">Drill weak spots</button>
-        <button class="btn" data-act="setup" data-id="${r.deckId}" data-mode="${r.mode === "exam" ? "exam" : "practice"}">Retake</button>
+        <button class="btn" data-act="setup" data-id="${r.deckId}" data-mode="${r.real ? "real" : r.mode === "exam" ? "exam" : "practice"}">${r.real ? "New full exam" : "Retake"}</button>
         <button class="btn" data-act="stats" data-id="${r.deckId}">All stats</button>
         <button class="btn" data-act="nav" data-view="decks">Decks</button>
       </div></div>
@@ -719,7 +759,7 @@ function renderStats() {
   const s = deckSummary(d), p = getProg(d.id), ts = topicStats(d);
   const bars = ts.map(t => barRow(`${t.topic} (${t.total})`, t.right, t.right + t.wrong)).join("");
   const missed = d.questions.map(q => ({q, st: p.q[q.id]})).filter(x => x.st && x.st.wrong).sort((a, b) => b.st.wrong - a.st.wrong).slice(0, 10);
-  const att = p.attempts.slice().reverse().slice(0, 20).map(a => `<tr><td>${fmtDate(a.date)}</td><td>${{exam: esc(BRAND.examLabel), practice: "Practice", flash: "Flashcards"}[a.mode]}</td><td>${a.correct}/${a.total}</td><td><strong>${a.pct}%</strong></td><td>${fmtTime(a.secs)}</td></tr>`).join("");
+  const att = p.attempts.slice().reverse().slice(0, 20).map(a => `<tr><td>${fmtDate(a.date)}</td><td>${a.real ? sessLabel(a) : {exam: esc(BRAND.examLabel), practice: "Practice", flash: "Flashcards"}[a.mode]}</td><td>${a.correct}/${a.total}</td><td><strong>${a.pct}%</strong></td><td>${fmtTime(a.secs)}</td></tr>`).join("");
   return `<div class="row between" style="margin-bottom:12px"><h1>${esc(d.title)}</h1><button class="btn sm" data-act="nav" data-view="decks">← Decks</button></div>
     <div class="grid">
       <div class="card"><h3>Mastery</h3><div class="score-ring">${pct(s.mastered, s.total)}%</div><p class="muted">${s.mastered} of ${s.total} answered right twice in a row</p></div>
@@ -1194,6 +1234,8 @@ const actions = {
   "exam-grid": () => examGrid(),
   "goto": ds => { closeModal(); S.session.i = +ds.i; render(); },
   "submit-exam": () => submitExam(),
+  "start-real": ds => { const d = S.decks.find(x => x.id === ds.id); if (d) startReal(d, balancedDraw(d.questions, BRAND.realExam.count), realMinutes(d.questions.length) * 60, false); },
+  "retest-missed": () => { const r = S.lastResult, d = S.decks.find(x => x.id === r?.deckId); if (!d) return; const qs = shuffle(r.items.filter(it => !it.ok).map(it => it.q)); if (qs.length) startReal(d, qs, qs.length * BRAND.realExam.retestSecs, true); },
   "end-practice": () => finishSession(),
   "rfilter": ds => { S.lastResult.filter = ds.f; render(); },
   "flip": () => { S.session.flipped = !S.session.flipped; $(".flash")?.classList.toggle("flipped", S.session.flipped); },

@@ -1,6 +1,6 @@
 # Faithful Study: Offline Quiz & Study Vault
 
-**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.1.0
+**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.3.0
 
 Faithful Study turns any course material into practice exams you can take anywhere, with or without internet. It runs on laptops, desktops, iPhones, iPads, and Android phones, with nothing to install from an app store. Your data stays on your device.
 
@@ -137,6 +137,7 @@ For the Bible edition, add its address: `python tools\make-import-link.py deck.j
 
 - **Practice:** Instant feedback with the explanation and sources after every answer. Hints are available where the deck has them.
 - **Timed exam:** Mimics the real test. It has a countdown (default 90 seconds per question), a question grid, and flags. You get no feedback until you submit. Results include your score against your target, a breakdown by topic, and a full review filtered by All, Missed, or Flagged.
+- **Exam simulation (40 questions · 60 minutes):** Set up like the real exam. Questions are drawn from every topic in proportion to the deck, in random order. Topic labels, weak-spot tags, hints, and explanations stay hidden until you submit, and the exam submits itself at 0:00. Afterward you get your grade, a topic breakdown, every explanation, hint, and source, and **Retest what I missed**: a new timed exam of only the questions you got wrong (90 seconds each), under the same rules. Decks with fewer than 40 questions keep the same pace. To change the count or time, edit `realExam` in the `BRAND` block.
 - **Flashcards:** Tap or press Space to flip. Rate each card **Again** (1) or **Got it** (2).
 - **Weak spots:** Drills only the questions you last missed, or miss more often than you get right.
 - **Filters:** Every mode can filter by topic, limit the question count, and shuffle.
