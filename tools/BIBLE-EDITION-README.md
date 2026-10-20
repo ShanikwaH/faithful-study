@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.5
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.6
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
@@ -104,6 +104,8 @@ Topic: Exodus to Ruth
 Hint: It is called the mountain of God.
 ```
 Mark the right answer with `*`, or add a line such as `Answer: B`. You can also use CSV from a spreadsheet, JSON from any AI, or the editor in the app (**••• → Edit questions**).
+
+**Deck links inside the app:** Import › **📎 Deck links** lists every deck on the device with **📋 Copy link** (and **📤 Share** on phones). Each deck's ••• menu also has **Copy deck link**. Paste the link into Import › **📋 Paste & import** in the other copy of the app. You don't need the links page.
 
 **Deck links on a phone:** a deck link carries the whole deck. Copy the link, open the app from your Home Screen, go to **Import**, and tap **📋 Paste & import**. Don't just tap the link: a Home Screen app keeps its own storage, so tapping opens the deck in Safari or Chrome instead. To make a link from a deck file, run `python tools\make-import-link.py deck.json https://shanikwah.github.io/bible-stories/` from the Faithful Study folder. Needs app version 1.2.1+.
 

@@ -166,6 +166,10 @@ footer.foot{max-width:960px;margin:0 auto;padding:0 16px 30px;font-size:.8rem;co
 @media (max-width:560px){ nav.tabs{gap:0} nav.tabs button{flex:1 0 auto;padding:10px 7px;font-size:.84rem}  h1{font-size:1.3rem} .card{padding:14px} .bar{grid-template-columns:1fr 2fr 44px} }
 @media (max-width:370px){ .hide-xs{display:none} nav.tabs button{padding:10px 5px;font-size:.8rem} }
 @media print{ .app-header,nav,footer,.btn{display:none!important} body{background:#fff;color:#000} }
+.dllist{display:grid;gap:8px}
+.dlrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px;border:1px solid var(--border);border-radius:12px}
+.dltxt{display:flex;flex-direction:column;min-width:0;flex:1}
+.dltxt strong{overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -200,7 +204,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.3.5",
+  version: "1.3.6",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -506,6 +510,7 @@ function renderDeckList() {
           <div class="menu-list hide">
             <button data-act="edit-deck" data-id="${d.id}">Edit questions</button>
             <button data-act="stats" data-id="${d.id}">Progress & stats</button>
+            <button data-act="deck-link" data-id="${d.id}">Copy deck link</button>
             <button data-act="export-json" data-id="${d.id}">Export JSON</button>
             <button data-act="export-csv" data-id="${d.id}">Export CSV (Excel)</button>
             <button data-act="print-deck" data-id="${d.id}">Print / save PDF</button>
@@ -858,6 +863,7 @@ Source: 31 C.F.R. §10.21
 Topic: Tax ethics"></textarea></div>
     <div class="row"><button class="btn primary" data-act="import-clipboard">📋 Paste &amp; import</button><button class="btn" data-act="import-paste">Import pasted text</button><button class="btn" data-act="load-sample">${esc(BRAND.sampleButton)}</button></div>
   </div>
+  ${deckLinksCard()}
   <div class="card" style="margin-top:14px">
     <h2>Make a quiz with any AI (Claude, ChatGPT, Gemini, Copilot…)</h2>
     <ol style="padding-left:20px"><li>Open your AI and attach your course files: PDFs, slides, book chapters, spreadsheets, images, video transcripts, or a pre-assessment report.</li>
@@ -970,6 +976,33 @@ function pickFiles(accept, cb) { const inp = $("#hiddenFile"); inp.value = ""; i
 // Link format: https://…/index.html#import=<base64url of gzip(deck JSON)>
 // Everything after "#" stays on the device (browsers never send it to the server), so a
 // private deck can travel inside the link itself without being published anywhere.
+/* Deck links made inside the app: copy one, then paste it into Import › Paste & import in this app on any device
+   (for example from Safari into the Home Screen app). The whole deck rides in the #fragment, which is never sent to a server. */
+async function deckLink(d) {
+  const raw = new TextEncoder().encode(JSON.stringify(JSON.parse(deckToJSON(d))));
+  const app = location.origin + location.pathname;
+  if (typeof CompressionStream === "undefined") return app + "#import=" + bytesToB64url(raw);
+  const gz = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  return app + "#import=" + bytesToB64url(gz);
+}
+function bytesToB64url(u) { let bin = ""; for (let i = 0; i < u.length; i += 8192) bin += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+async function copyDeckLink(id, share) {
+  const d = S.decks.find(x => x.id === id); if (!d) return;
+  const link = await deckLink(d);
+  if (share && navigator.share) { try { await navigator.share({title: d.title, text: `Deck link for ${d.title}. Open ${BRAND.name} from your Home Screen, go to Import, and tap Paste & import.`, url: link}); } catch (e) {} return; }
+  try { await navigator.clipboard.writeText(link); toast(`Link copied for “${d.title}”. In the other copy of the app, go to Import and tap 📋 Paste & import.`, false, 6000); }
+  catch (e) { openModal(`<h2>Deck link</h2><p class="muted">Select all, copy, then paste it in Import › Paste & import.</p><textarea readonly style="min-height:160px" onfocus="this.select()">${esc(link)}</textarea><div class="actions"><button class="btn" data-act="modal-close">Close</button></div>`); }
+}
+function deckLinksCard() {
+  const locked = S.lockPending && S.lockHas;
+  return `<div class="card" style="margin-top:14px"><h2 style="margin-top:0">📎 Deck links</h2>
+    <p class="muted" style="margin-top:0">Copy a link for any deck here, then paste it into <strong>Import › 📋 Paste & import</strong> in this app on another device, or in your Home Screen app if you opened the site in Safari. Each link holds the whole deck, so it works even when you can't reach a links page in the browser.</p>
+    ${S.decks.length ? `<div class="dllist">${S.decks.map(d => `<div class="dlrow"><div class="dltxt"><strong>${esc(d.title)}</strong><span class="muted">${d.questions.length} questions</span></div>
+      <div class="row"><button class="btn sm" data-act="deck-link" data-id="${d.id}">📋 Copy link</button>${navigator.share ? `<button class="btn sm" data-act="deck-share" data-id="${d.id}">📤 Share</button>` : ""}</div></div>`).join("")}</div>` : `<p class="muted">No decks on this device yet.</p>`}
+    ${locked ? `<p class="help">Your built-in decks are locked on this device. Unlock them on the Decks tab to get their links here.</p>` : ""}
+    <p class="help">Links for private decks show the questions to anyone who has them, so share them only with people you trust.</p></div>`;
+}
+
 async function importFromLink(payload, fromAddressBar = true) {
   if (fromAddressBar) history.replaceState(null, "", location.pathname + location.search);   // clear the link so a refresh won't re-import
   try {
@@ -1340,6 +1373,8 @@ const actions = {
   "backup": () => doBackup(),
   "restore": () => pickFiles(isTouch ? "" : ".json,application/json", fs => fs[0] && doRestore(fs[0])),
   "wipe": async () => { if (await confirmBox("Erase everything?", "Deletes all decks, progress, library files, and settings on this device. Export a backup first if you might need anything.", "Erase all", true)) { for (const s of ["decks","progress","files","kv"]) await DB.clear(s); await loadAll(); applyBrand(); nav("decks"); toast("All data erased."); } },
+  "deck-link": ds => copyDeckLink(ds.id, false),
+  "deck-share": ds => copyDeckLink(ds.id, true),
   "lock-later": () => { S.lockLater = true; render(); },
   "lock-forget": async () => { if (await confirmBox("Forget the passphrase?", "The built-in decks and your progress stay. New versions won't load until you enter the passphrase again.", "Forget")) { await DB.del("kv", "locked-decks"); S.lockLater = false; await syncLocked(); render(); toast("Passphrase forgotten on this device."); } },
   "lock-show": () => { S.lockLater = false; S.lockPending = true; nav("decks"); },

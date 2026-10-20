@@ -1,6 +1,6 @@
 # Faithful Study: Offline Quiz & Study Vault
 
-**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.3.5
+**Faithful with Numbers. Faithful with Truth.** · by AnalyticsByShanikwa · v1.3.6
 
 Faithful Study turns any course material into practice exams you can take anywhere, with or without internet. It runs on laptops, desktops, iPhones, iPads, and Android phones, with nothing to install from an app store. Your data stays on your device.
 
@@ -140,6 +140,8 @@ Your D550 Practice Exams 1 and 2 ship inside the app in `locked-decks.json`, enc
 - **Settings › Built-in decks** shows whether this device is unlocked, and lets you forget the passphrase.
 - **Deck links still work** for any deck, including these. Use them on a device where you'd rather not enter the passphrase.
 - **To update the locked decks** (for the app owner): edit the deck files in the private `decks/` repo, run `python3 tools/lock-decks.py`, bump the version, and push. The passphrase and the deck list live in `decks/LOCK.json` in the private repo, never in this public one. To lock every device out, change both the passphrase and the salt.
+
+**Deck links inside the app:** Import › **📎 Deck links** lists every deck on the device with **📋 Copy link** (and **📤 Share** on phones). Each deck's ••• menu also has **Copy deck link**. Paste the link into Import › **📋 Paste & import** in the other copy of the app. You don't need the links page.
 
 ## Study modes
 
