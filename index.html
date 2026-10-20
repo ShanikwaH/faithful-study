@@ -200,7 +200,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.2.2",
+  version: "1.2.3",
   // Wording that changes per edition
   examLabel: "Timed exam",
   correctMsg: "Correct!",
@@ -827,6 +827,17 @@ Topic: Tax ethics"></textarea></div>
   </details>
   <p class="help">Want to keep PDFs, videos, or images for offline studying? Add them in the <a href="#" data-act="nav" data-view="library">Library</a>.</p>`;
 }
+// When an incoming deck has the same title as one already saved, offer to update that deck in place.
+// Keeping the saved deck's id keeps all progress (progress is stored per deck id and question id).
+async function reuseExisting(decks) {
+  const pairs = decks.map(d => [d, S.decks.find(x => x.title === d.title)]).filter(([, x]) => x);
+  if (!pairs.length) return true;
+  const names = pairs.map(([d]) => `“${esc(d.title)}”`).join(", ");
+  const ok = await confirmBox("Update your deck?", `You already have ${names}. Replace it with this version? Your progress and stats are kept.`, "Update deck");
+  if (!ok) return false;
+  for (const [d, x] of pairs) { d.id = x.id; if (x.created) d.created = x.created; }
+  return true;
+}
 async function importDecks(decks, sourceLabel) {
   let n = 0, qn = 0;
   for (const d of decks) { if (!d.questions.length) continue; await saveDeck(d); n++; qn += d.questions.length; }
@@ -842,7 +853,7 @@ async function handleImportFiles(files) {
       all.push(...parseAny(await readAs(f, "text"), f.name));
     } catch (e) { toast(`${f.name}: ${e.message}`, true, 6000); }
   }
-  if (all.length) try { await importDecks(all, files.length === 1 ? files[0].name : files.length + " files"); } catch (e) { toast(e.message, true, 6000); }
+  if (all.length) try { if (!(await reuseExisting(all))) { toast("Kept your existing deck."); return; } await importDecks(all, files.length === 1 ? files[0].name : files.length + " files"); } catch (e) { toast(e.message, true, 6000); }
 }
 function bindDrop(el) {
   const kind = el.dataset.kind || "import";
@@ -870,8 +881,7 @@ async function importFromLink(payload, fromAddressBar = true) {
       text = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
     } else text = new TextDecoder().decode(bytes);
     const decks = parseAny(text, "Shared deck.json");
-    const dupes = decks.filter(d => S.decks.some(x => x.title === d.title && x.questions.length === d.questions.length));
-    if (dupes.length && !(await confirmBox("Already imported", `“${esc(dupes[0].title)}” is already in your decks. Import another copy?`, "Import again"))) { toast("Kept your existing deck."); render(); return; }
+    if (!(await reuseExisting(decks))) { toast("Kept your existing deck."); render(); return; }
     await importDecks(decks, "link");
     if (!fromAddressBar) { const pb = $("#pasteBox"); if (pb) pb.value = ""; }
   } catch (e) { const cut = /atob|decod|JSON|gzip|incorrect|invalid/i.test(e.message); toast(cut ? "That link looks incomplete, so part of it was probably cut off when it was copied. Copy the whole link again and paste it." : "Couldn’t import that link: " + e.message, true, 9000); }
