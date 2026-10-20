@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.8
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.9
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
@@ -106,7 +106,7 @@ Hint: It is called the mountain of God.
 Mark the right answer with `*`, or add a line such as `Answer: B`. You can also use CSV from a spreadsheet, JSON from any AI, or the editor in the app (**••• → Edit questions**).
 
 **Links for everything, inside the app:** you can move decks, prayers, and reading plans between copies of the app (Safari and the Home Screen app, another phone, a laptop) with a link. You don't need a links page. Paste any of these links into **Import › 📋 Paste & import**:
-- **Decks:** Import › **📎 Deck links** lists every deck on the device, plus the three starter decks under **Ready-made decks**. Each has **📋 Copy link**, **📤 Share**, and **Add here** (or **Update here**, which keeps your progress).
+- **Decks:** Import › **📚 Ready-made decks** lists the three starter decks. Each has **📋 Copy link**, **📤 Share**, and **Add here** (or **Update here**, which keeps your progress).
 - **Prayers:** every prayer has **🔗 Copy link**. A link to one of your own prayers adds it to **🖊️ My prayers** on the other device. A link to a built-in prayer opens that prayer. Under **🖊️ My prayers**, **Copy one link for all my prayers** moves them all at once.
 - **Reading plans:** the open plan has **🔗 Copy link** and **📤 Share**. The other device starts the same plan, and you pick its start date.
 

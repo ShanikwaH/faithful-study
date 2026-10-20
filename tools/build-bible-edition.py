@@ -78,7 +78,8 @@ new_brand = '''const BRAND = {
   speechRate: 0.92,
   autoSeed: true,
   sampleButton: "Load the 60 starter Bible stories",
-  builtInLinks: "deck-links.json"
+  builtInLinks: "deck-links.json",
+  deviceDeckLinks: false
 };'''
 html = html.replace(old_brand, new_brand.replace("__BASE_VERSION__", BASE_VERSION))
 

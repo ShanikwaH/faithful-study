@@ -168,7 +168,7 @@ footer.foot{max-width:960px;margin:0 auto;padding:0 16px 30px;font-size:.8rem;co
 @media print{ .app-header,nav,footer,.btn{display:none!important} body{background:#fff;color:#000} }
 .dllist{display:grid;gap:8px}
 .dlrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px;border:1px solid var(--border);border-radius:12px}
-.dltxt{display:flex;flex-direction:column;min-width:0;flex:1}
+.dltxt{display:flex;flex-direction:column;min-width:0;flex:1 1 220px}
 .dltxt strong{overflow-wrap:anywhere}
 </style>
 </head>
@@ -204,7 +204,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.3.8",
+  version: "1.3.9",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -510,7 +510,7 @@ function renderDeckList() {
           <div class="menu-list hide">
             <button data-act="edit-deck" data-id="${d.id}">Edit questions</button>
             <button data-act="stats" data-id="${d.id}">Progress & stats</button>
-            <button data-act="deck-link" data-id="${d.id}">Copy deck link</button>
+            ${BRAND.deviceDeckLinks !== false ? `<button data-act="deck-link" data-id="${d.id}">Copy deck link</button>` : ""}
             <button data-act="export-json" data-id="${d.id}">Export JSON</button>
             <button data-act="export-csv" data-id="${d.id}">Export CSV (Excel)</button>
             <button data-act="print-deck" data-id="${d.id}">Print / save PDF</button>
@@ -948,15 +948,19 @@ async function copyDeckLink(id, share, deck) {
   catch (e) { openModal(`<h2>Deck link</h2><p class="muted">Select all, copy, then paste it in Import › Paste & import.</p><textarea readonly style="min-height:160px" onfocus="this.select()">${esc(link)}</textarea><div class="actions"><button class="btn" data-act="modal-close">Close</button></div>`); }
 }
 function deckLinksCard() {
-  const bi = S.builtIn || [];
+  const bi = S.builtIn || [], mine = BRAND.deviceDeckLinks !== false;
   if (BRAND.builtInLinks && !S.builtIn) builtInDecks().then(x => { if (x.length && S.view === "import") render(); });
+  if (!mine && !bi.length) return "";
+  const ready = bi.length ? `${mine ? `<h3 style="margin:16px 0 8px">Ready-made decks</h3>` : ""}<div class="dllist">${bi.map((d, i) => { const have = S.decks.some(x => x.title === d.title);
+      return `<div class="dlrow"><div class="dltxt"><strong>${esc(d.title)}</strong><span class="muted">${d.questions.length} questions${have ? " · on this device" : ""}</span></div>
+      <div class="row"><button class="btn sm" data-act="bi-link" data-i="${i}">📋 Copy link</button>${navigator.share ? `<button class="btn sm" data-act="bi-share" data-i="${i}">📤 Share</button>` : ""}<button class="btn sm primary" data-act="bi-add" data-i="${i}">${have ? "Update here" : "Add here"}</button></div></div>`; }).join("")}</div>` : "";
+  if (!mine) return `<div class="card" style="margin-top:14px"><h2 style="margin-top:0">📚 Ready-made decks</h2>
+    <p class="muted" style="margin-top:0">Tap <strong>Add here</strong> to load a deck, or <strong>Update here</strong> to refresh one you have (your progress is kept). To put a deck on another device, tap <strong>📋 Copy link</strong>, then paste it into <strong>Import › 📋 Paste & import</strong> there.</p>${ready}</div>`;
   return `<div class="card" style="margin-top:14px"><h2 style="margin-top:0">📎 Deck links</h2>
     <p class="muted" style="margin-top:0">Copy a link for any deck here, then paste it into <strong>Import › 📋 Paste & import</strong> in this app on another device, or in your Home Screen app if you opened the site in Safari. Each link holds the whole deck, so it works even when you can't reach a links page in the browser.</p>
     ${S.decks.length ? `<div class="dllist">${S.decks.map(d => `<div class="dlrow"><div class="dltxt"><strong>${esc(d.title)}</strong><span class="muted">${d.questions.length} questions</span></div>
       <div class="row"><button class="btn sm" data-act="deck-link" data-id="${d.id}">📋 Copy link</button>${navigator.share ? `<button class="btn sm" data-act="deck-share" data-id="${d.id}">📤 Share</button>` : ""}</div></div>`).join("")}</div>` : `<p class="muted">No decks on this device yet.</p>`}
-    ${bi.length ? `<h3 style="margin:16px 0 8px">Ready-made decks</h3><div class="dllist">${bi.map((d, i) => { const have = S.decks.some(x => x.title === d.title);
-      return `<div class="dlrow"><div class="dltxt"><strong>${esc(d.title)}</strong><span class="muted">${d.questions.length} questions${have ? " · on this device" : ""}</span></div>
-      <div class="row"><button class="btn sm" data-act="bi-link" data-i="${i}">📋 Copy link</button>${navigator.share ? `<button class="btn sm" data-act="bi-share" data-i="${i}">📤 Share</button>` : ""}<button class="btn sm primary" data-act="bi-add" data-i="${i}">${have ? "Update here" : "Add here"}</button></div></div>`; }).join("")}</div>` : ""}</div>`;
+    ${ready}</div>`;
 }
 
 async function importFromLink(payload, fromAddressBar = true) {
