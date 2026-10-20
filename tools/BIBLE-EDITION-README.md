@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.4
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.5
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
