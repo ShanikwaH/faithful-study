@@ -200,7 +200,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.3.2",
+  version: "1.3.3",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -461,7 +461,7 @@ const isCorrect = (q, sel) => sel && sel.length === q.answer.length && sel.every
 
 /* ============ NAV & RENDER ============ */
 // Edition add-ons (e.g. the Bible reader in Bible Stories) register extra views and post-render hooks here.
-const EXTRA_VIEWS = {}, EXTRA_AFTER = [];
+const EXTRA_VIEWS = {}, EXTRA_AFTER = [], BACKUP_KV = [];   // BACKUP_KV: ids of edition records in the "kv" store to include in backups
 function nav(view) { stopSpeak(); if (S.session && view !== "session" && !S.session.ended && S.session.mode === "exam") { toast("Finish or exit the exam first."); return; } stopTimer(); S.view = view; if (view !== "session") S.session = null; render(); window.scrollTo(0, 0); }
 function render() {
   document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-current", b.dataset.view === S.view ? "page" : "false"));
@@ -1188,7 +1188,8 @@ function renderSettings() {
 }
 async function doBackup() {
   const withFiles = $("#bkFiles")?.checked; toast("Preparing backup…");
-  const data = {format: "faithful-study-backup", version: 1, exported: new Date().toISOString(), decks: S.decks, progress: Object.values(S.progress), settings: {...S.settings, apiKey: ""}, files: []};
+  const data = {format: "faithful-study-backup", version: 1, exported: new Date().toISOString(), decks: S.decks, progress: Object.values(S.progress), settings: {...S.settings, apiKey: ""}, files: [], kv: []};
+  for (const id of BACKUP_KV) { const r = await DB.get("kv", id); if (r) data.kv.push(r); }
   if (withFiles) for (const f of await DB.all("files")) data.files.push({...f, blob: undefined, buf: undefined, data: abToB64(await fileBlob(f).arrayBuffer())});
   download(`faithful-study-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data));
 }
@@ -1201,6 +1202,8 @@ async function doRestore(file) {
     for (const p of data.progress || []) await DB.put("progress", p);
     for (const f of data.files || []) { const bin = atob(f.data), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); await DB.put("files", {...f, data: undefined, blob: undefined, buf: u.buffer}); }
     if (data.settings) { S.settings = {...S.settings, ...data.settings, apiKey: S.settings.apiKey}; await saveSettings(); }
+    for (const r of data.kv || []) if (BACKUP_KV.includes(r.id)) await DB.put("kv", r);
+    document.dispatchEvent(new CustomEvent("app-restored"));
     await loadAll(); applyBrand(); toast("Backup restored."); S.view = "decks"; render();
   } catch (e) { toast("Restore failed: " + e.message, true, 6000); }
 }

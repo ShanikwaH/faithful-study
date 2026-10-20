@@ -1,6 +1,6 @@
 # Bible Stories for All Ages: Quiz App
 
-*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.2
+*"Thy word have I hid in mine heart." (Psalm 119:11, KJV)* · by AnalyticsByShanikwa · v1.3.3
 
 This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and youth groups. It works on laptops, tablets, iPhones, and Android phones, even with no internet. Nothing to download from an app store, no accounts, and no ads. Everything stays on your device.
 
@@ -36,7 +36,10 @@ This is a Bible story quiz app for families, Sunday school, VBS, homeschool, and
     - **From the Bible:** 64 prayers and verses to pray. The words come straight from the KJV in this app.
     - **Classic prayers:** 23 public-domain prayers from the Book of Common Prayer (1662, 1928, and 1979) and from St. Francis, St. Patrick, St. Richard, St. Teresa, and St. Augustine. Each shows its source with a link.
     - **Written for this app:** 30 short original prayers, each built on the KJV verse shown with it.
-  - **Adding prayers:** prayers are listed in `tools/bible/prayer-data/` in the Faithful Study source. To add one, run `python3 tools/bible/make-prayers.py`, then rebuild this edition. Every Bible reference is checked against the KJV text.
+  - **✍️ Add your own prayers:** tap **＋ Add your own prayer** on the Prayers tab. Give it a title, write the prayer, and add a Bible verse if you like (the app shows it in KJV words). Then pick when it's for, such as Anxious, Test day, or Family.
+    - Your prayers show up under **🖊️ My prayers**, in search, and under the feelings and topics you picked. You can edit or delete them any time.
+    - They stay on this device. **Settings › Backup** now saves your own prayers, favorites, bookmarks, and reading plans along with your decks, so you can move them to a new phone.
+  - **For app builders:** the built-in prayers are listed in `tools/bible/prayer-data/` in the Faithful Study source. To add one for everyone, run `python3 tools/bible/make-prayers.py`, then rebuild this edition. Every Bible reference is checked against the KJV text.
 - **Every answer** shows a short explanation and the KJV scripture reference, often with the exact verse quoted.
 - **🔊 Read aloud** reads each question and its answers out loud for pre-readers. It uses the device's built-in voice, so it works offline on most phones, tablets, and computers.
 - **Study modes:**

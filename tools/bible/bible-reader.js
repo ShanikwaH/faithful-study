@@ -295,6 +295,8 @@
     return body + playerBar();
   }
   EXTRA_VIEWS.bible = renderBible;
+  BACKUP_KV.push("bible");   // bookmarks, reading plans, and reading options go into Settings › Backup
+  document.addEventListener("app-restored", () => { BR.stateLoaded = false; });
   EXTRA_AFTER.push(() => {
     if (S.view !== "bible") return;
     updateBar();
