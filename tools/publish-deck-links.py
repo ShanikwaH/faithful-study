@@ -7,7 +7,7 @@ Edit DECKS below to choose which deck files from the private decks/ folder are o
 import json
 from pathlib import Path
 BASE = Path(__file__).resolve().parent.parent
-DECKS = ["d550-oa-focus-review.json", "d550-practice-exam-3.json", "d550-practice-exam-2.json", "d550-ethics-scenario-exam.json"]
+DECKS = ["d550-oa-focus-review.json", "d550-practice-exam-4.json", "d550-practice-exam-3.json", "d550-practice-exam-2.json", "d550-ethics-scenario-exam.json"]
 decks = [json.loads((BASE / "decks" / f).read_text(encoding="utf-8")) for f in DECKS]
 (BASE / "deck-links.json").write_text(json.dumps({"decks": decks}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 print(f"deck-links.json: {len(decks)} decks, {sum(len(d['questions']) for d in decks)} questions")
