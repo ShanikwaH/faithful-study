@@ -210,7 +210,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.6.2",
+  version: "1.6.3",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -942,10 +942,11 @@ async function builtInDecks() {
 }
 
 async function handleImportFiles(files) {
-  const all = [];
+  const all = [], packs = [];
+  for (const f of files) if (await isLibraryPack(f)) packs.push(f);
+  if (packs.length) { await loadLibraryPacks(packs); files = [...files].filter(f => !packs.includes(f)); if (!files.length) return; }
   for (const f of files) {
     try {
-      if (await isLibraryPack(f)) { await loadLibraryPack(f); continue; }
       if (/\.(pdf|docx?|pptx?|xlsx?|png|jpe?g|gif|webp|heic|mp4|mov|m4a|mp3|wav|epub)$/i.test(f.name)) { toast(`${f.name} is study material, not a quiz file. Add it in Library, or use AI Builder to turn it into questions.`, true, 5000); continue; }
       all.push(...parseAny(await readAs(f, "text"), f.name));
     } catch (e) { toast(`${f.name}: ${e.message}`, true, 6000); }
@@ -1054,7 +1055,7 @@ async function renderLibrary() {
   const files = (await DB.all("files")).sort((a, b) => b.added - a.added);
   let est = ""; try { if (navigator.storage?.estimate) { const e = await navigator.storage.estimate(); est = `Using ${fmtBytes(e.usage || 0)} of about ${fmtBytes(e.quota || 0)} available on this device.`; } } catch (e) {}
   const groups = {}; files.forEach(f => (groups[f.course || "Unsorted"] ||= []).push(f));
-  const list = Object.entries(groups).map(([c, fs]) => `<h3 style="margin-top:14px">${esc(c)}</h3>${fs.map(f => `<div class="file-row"><div class="file-ico">${fileKind(f)}</div>
+  const list = Object.entries(groups).sort(([a], [b]) => (a === "Unsorted") - (b === "Unsorted") || a.localeCompare(b, undefined, {numeric: true})).map(([c, fs]) => `<h3 style="margin-top:14px">${esc(c)}</h3>${fs.map(f => `<div class="file-row"><div class="file-ico">${fileKind(f)}</div>
     <div class="grow"><div class="name">${esc(f.name)}</div><div class="muted" style="font-size:.8rem">${fmtBytes(f.size)} · ${fmtDate(f.added)}</div></div>
     <button class="btn sm" data-act="open-file" data-id="${f.id}">Open</button><button class="btn sm ghost" data-act="dl-file" data-id="${f.id}" aria-label="Download ${esc(f.name)}">⤓</button><button class="btn sm ghost" data-act="del-file" data-id="${f.id}" aria-label="Delete ${esc(f.name)}" style="color:var(--bad)">✕</button></div>`).join("")}`).join("");
   return `<h1>Study library</h1><p class="muted">Store PDFs, books, slides, spreadsheets, images, audio, and video on this device so you can study offline. Files never leave your device unless you send them to an AI in AI Builder.</p>
@@ -1062,13 +1063,13 @@ async function renderLibrary() {
       <div class="field"><label for="libCourse">${esc(BRAND.courseWord)} label for new files</label><input id="libCourse" type="text" placeholder="${esc(BRAND.courseExample)}" value="${esc(S.settings.lastCourse || "")}"></div>
       <div id="dropzone" class="drop" data-kind="library" data-act="pick-lib" role="button" tabindex="0"><strong>Drop files here or tap to add</strong><p class="muted" style="margin:6px 0 0">Any file type</p></div>
       <div class="row"><button class="btn sm" data-act="load-pack">📦 Load library pack</button><button class="btn sm" data-act="new-note">+ Write a note</button><button class="btn sm" data-act="persist">Protect storage from auto-cleanup</button></div>
-      <p class="help">A library pack is one .json file that carries several study files with their course labels (for example, a course's slides and score reports). Loading it adds only those files; your decks and progress stay as they are.</p>
+      <p class="help">A library pack is one .json file that carries several study files with their course labels (for example, a course's slides and score reports). You can pick several packs at once. Loading adds only those files; your decks and progress stay as they are.</p>
       <p class="help">${esc(est)}</p></div>
     <div class="card" style="margin-top:14px">${files.length ? list : `<p class="muted">No files yet.</p>`}</div>`;
 }
 async function addLibraryFiles(fs) {
   const packs = []; for (const f of fs) if (await isLibraryPack(f)) packs.push(f);
-  for (const f of packs) await loadLibraryPack(f);
+  if (packs.length) await loadLibraryPacks(packs);
   fs = fs.filter(f => !packs.includes(f)); if (!fs.length) return;
   const course = ($("#libCourse")?.value || "").trim(); S.settings.lastCourse = course; saveSettings();
   let n = 0;
@@ -1082,16 +1083,24 @@ async function isLibraryPack(f) {
   try { const head = await f.slice(0, 400).text(); if (!/"format"\s*:\s*"faithful-study-backup"/.test(head)) return false;
     const d = JSON.parse(await f.text()); return Array.isArray(d.files) && d.files.length > 0 && !(d.decks || []).length; } catch (e) { return false; }
 }
-async function loadLibraryPack(file) {
-  let data; try { data = JSON.parse(await readAs(file, "text")); } catch (e) { toast("That file isn't a library pack: " + e.message, true, 6000); return; }
-  const files = Array.isArray(data.files) ? data.files : [];
-  if (data.format !== "faithful-study-backup" || !files.length) { toast("That file has no library files in it.", true, 5000); return; }
-  const labels = [...new Set(files.map(f => f.course || "Unsorted"))].join(", ");
-  const existing = new Set((await DB.all("files")).map(f => f.id)), upd = files.filter(f => existing.has(f.id)).length;
-  if (!(await confirmBox("Load library pack?", `Adds ${files.length} file${files.length > 1 ? "s" : ""} to your Library under ${esc(labels)}${upd ? ` (${upd} already here will be updated)` : ""}. Your decks, progress, and settings stay as they are.`, "Load pack"))) return;
+async function loadLibraryPack(file) { return loadLibraryPacks([file]); }
+async function loadLibraryPacks(fileList) {
+  const big = fileList.reduce((a, f) => a + (f.size || 0), 0) > 40 * 1048576;
+  if (big) toast("Reading a large pack. This can take a minute on a phone…", false, 6000);
+  const packs = [];
+  for (const file of fileList) {
+    try { const data = JSON.parse(await readAs(file, "text")); if (data.format === "faithful-study-backup" && Array.isArray(data.files) && data.files.length) packs.push({name: file.name, files: data.files}); else toast(`${file.name} has no library files in it.`, true, 5000); }
+    catch (e) { toast(`${file.name} isn't a library pack: ${e.message}`, true, 6000); }
+  }
+  if (!packs.length) return;
+  const byId = new Map(); packs.forEach(p => p.files.forEach(f => byId.set(f.id || uid("file"), f)));   // same file in several packs counts once
+  const files = [...byId.entries()], labels = [...new Set(files.map(([, f]) => f.course || "Unsorted"))].sort();
+  const existing = new Set((await DB.all("files")).map(f => f.id)), upd = files.filter(([id]) => existing.has(id)).length;
+  const what = packs.length > 1 ? `${packs.length} packs (${files.length} files)` : `${files.length} file${files.length > 1 ? "s" : ""}`;
+  if (!(await confirmBox(packs.length > 1 ? "Load library packs?" : "Load library pack?", `Adds ${what} to your Library under ${esc(labels.join(", "))}${upd ? ` (${upd} already here will be updated)` : ""}. Your decks, progress, and settings stay as they are.`, packs.length > 1 ? "Load packs" : "Load pack"))) return;
   let n = 0;
-  for (const f of files) { try { const bin = atob(f.data), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-    await DB.put("files", {id: f.id || uid("file"), name: f.name, type: f.type || "", size: f.size || u.length, course: f.course || "", added: f.added || Date.now(), buf: u.buffer}); n++; } catch (e) { toast(`Couldn't store ${f.name}: ${e.message}`, true, 6000); } }
+  for (const [id, f] of files) { try { const bin = atob(f.data), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    await DB.put("files", {id, name: f.name, type: f.type || "", size: f.size || u.length, course: f.course || "", added: f.added || Date.now(), buf: u.buffer}); n++; } catch (e) { toast(`Couldn't store ${f.name}: ${e.message}`, true, 6000); } }
   toast(`Loaded ${n} file${n > 1 ? "s" : ""} into your Library.`); S.view = "library"; render();
 }
 async function openFile(id) {
@@ -1385,7 +1394,7 @@ const actions = {
   "copy-prompt": async () => { try { await navigator.clipboard.writeText(AI_PROMPT); toast("Prompt copied. Paste it into any AI with your files attached."); } catch (e) { download("ai-quiz-prompt.txt", AI_PROMPT, "text/plain"); } },
   "dl-prompt": () => download("ai-quiz-prompt.txt", AI_PROMPT, "text/plain"),
   "pick-lib": () => pickFiles("", addLibraryFiles),
-  "load-pack": () => pickFiles(isTouch ? "" : ".json,application/json", fs => fs[0] && loadLibraryPack(fs[0])),
+  "load-pack": () => pickFiles(isTouch ? "" : ".json,application/json", fs => fs.length && loadLibraryPacks(fs)),
   "open-file": ds => openFile(ds.id),
   "dl-file": async ds => { const f = await DB.get("files", ds.id); if (f) download(f.name, fileBlob(f)); },
   "del-file": async ds => { const f = await DB.get("files", ds.id); if (f && await confirmBox("Delete file?", `Remove “${esc(f.name)}” from this device?`, "Delete", true)) { await DB.del("files", ds.id); render(); } },
