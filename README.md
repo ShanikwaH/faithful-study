@@ -185,6 +185,8 @@ Plan any course day by day until your exam, with any decks you have now or add l
 
 Store PDFs, e-books, slides, spreadsheets, images, audio, and video on the device, grouped by course. Open them right inside the app: images, video, audio, PDFs, and text preview directly, and Word, PowerPoint, and Excel files show a text preview. You can also write quick notes. Tap **Protect storage from auto-cleanup** once so the browser doesn't clear your files.
 
+**Library packs:** one `.json` file can carry several study files with their course labels, such as a course's slides, notes, and score reports. Tap **📦 Load library pack** in Library (or pick the pack in Import, or drop it on the Library drop zone). It adds only those files; your decks, progress, and settings stay as they are, and loading the same pack again updates the files instead of duplicating them. Packs you make from course material or personal records should stay private (for example in OneDrive or a private repo), not in this public app.
+
 > On iPhone, Safari may clear data for websites you haven't opened in a while. Installing the app to the Home Screen prevents that. Export a backup either way.
 
 ---

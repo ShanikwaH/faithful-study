@@ -142,7 +142,7 @@ summary{cursor:pointer;font-weight:600}
 .file-row{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
 .file-ico{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--surface-2);font-size:.7rem;font-weight:800;flex:none;color:var(--muted)}
 .file-row .grow{flex:1;min-width:0}
-.file-row .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-row .name{font-weight:600;overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .drop{border:2px dashed var(--border);border-radius:var(--radius);padding:26px 16px;text-align:center;background:var(--surface);cursor:pointer}
 .drop.over{border-color:var(--accent);background:var(--surface-2);background:color-mix(in srgb,var(--accent) 7%,var(--surface))}
 
@@ -210,7 +210,7 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.6.1",
+  version: "1.6.2",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
@@ -945,6 +945,7 @@ async function handleImportFiles(files) {
   const all = [];
   for (const f of files) {
     try {
+      if (await isLibraryPack(f)) { await loadLibraryPack(f); continue; }
       if (/\.(pdf|docx?|pptx?|xlsx?|png|jpe?g|gif|webp|heic|mp4|mov|m4a|mp3|wav|epub)$/i.test(f.name)) { toast(`${f.name} is study material, not a quiz file. Add it in Library, or use AI Builder to turn it into questions.`, true, 5000); continue; }
       all.push(...parseAny(await readAs(f, "text"), f.name));
     } catch (e) { toast(`${f.name}: ${e.message}`, true, 6000); }
@@ -1060,15 +1061,38 @@ async function renderLibrary() {
     <div class="card stack">
       <div class="field"><label for="libCourse">${esc(BRAND.courseWord)} label for new files</label><input id="libCourse" type="text" placeholder="${esc(BRAND.courseExample)}" value="${esc(S.settings.lastCourse || "")}"></div>
       <div id="dropzone" class="drop" data-kind="library" data-act="pick-lib" role="button" tabindex="0"><strong>Drop files here or tap to add</strong><p class="muted" style="margin:6px 0 0">Any file type</p></div>
-      <div class="row"><button class="btn sm" data-act="new-note">+ Write a note</button><button class="btn sm" data-act="persist">Protect storage from auto-cleanup</button></div>
+      <div class="row"><button class="btn sm" data-act="load-pack">📦 Load library pack</button><button class="btn sm" data-act="new-note">+ Write a note</button><button class="btn sm" data-act="persist">Protect storage from auto-cleanup</button></div>
+      <p class="help">A library pack is one .json file that carries several study files with their course labels (for example, a course's slides and score reports). Loading it adds only those files; your decks and progress stay as they are.</p>
       <p class="help">${esc(est)}</p></div>
     <div class="card" style="margin-top:14px">${files.length ? list : `<p class="muted">No files yet.</p>`}</div>`;
 }
 async function addLibraryFiles(fs) {
+  const packs = []; for (const f of fs) if (await isLibraryPack(f)) packs.push(f);
+  for (const f of packs) await loadLibraryPack(f);
+  fs = fs.filter(f => !packs.includes(f)); if (!fs.length) return;
   const course = ($("#libCourse")?.value || "").trim(); S.settings.lastCourse = course; saveSettings();
   let n = 0;
   for (const f of fs) { try { await DB.put("files", {id: uid("file"), name: f.name, type: f.type || "", size: f.size, course, added: Date.now(), buf: await f.arrayBuffer()}); n++; } catch (e) { toast(`Couldn't store ${f.name}: ${e.message}`, true, 6000); } }
   if (n) toast(`Added ${n} file${n > 1 ? "s" : ""} to your library.`); if (S.view === "library") render();
+}
+/* Library packs: a backup-format .json that carries only files (no decks), e.g. a course's slides and reports.
+   Loading one adds the files with their course labels; same IDs replace, so loading twice never duplicates. */
+async function isLibraryPack(f) {
+  if (!/\.json$/i.test(f.name || "") || f.size < 200) return false;
+  try { const head = await f.slice(0, 400).text(); if (!/"format"\s*:\s*"faithful-study-backup"/.test(head)) return false;
+    const d = JSON.parse(await f.text()); return Array.isArray(d.files) && d.files.length > 0 && !(d.decks || []).length; } catch (e) { return false; }
+}
+async function loadLibraryPack(file) {
+  let data; try { data = JSON.parse(await readAs(file, "text")); } catch (e) { toast("That file isn't a library pack: " + e.message, true, 6000); return; }
+  const files = Array.isArray(data.files) ? data.files : [];
+  if (data.format !== "faithful-study-backup" || !files.length) { toast("That file has no library files in it.", true, 5000); return; }
+  const labels = [...new Set(files.map(f => f.course || "Unsorted"))].join(", ");
+  const existing = new Set((await DB.all("files")).map(f => f.id)), upd = files.filter(f => existing.has(f.id)).length;
+  if (!(await confirmBox("Load library pack?", `Adds ${files.length} file${files.length > 1 ? "s" : ""} to your Library under ${esc(labels)}${upd ? ` (${upd} already here will be updated)` : ""}. Your decks, progress, and settings stay as they are.`, "Load pack"))) return;
+  let n = 0;
+  for (const f of files) { try { const bin = atob(f.data), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    await DB.put("files", {id: f.id || uid("file"), name: f.name, type: f.type || "", size: f.size || u.length, course: f.course || "", added: f.added || Date.now(), buf: u.buffer}); n++; } catch (e) { toast(`Couldn't store ${f.name}: ${e.message}`, true, 6000); } }
+  toast(`Loaded ${n} file${n > 1 ? "s" : ""} into your Library.`); S.view = "library"; render();
 }
 async function openFile(id) {
   const f = await DB.get("files", id); if (!f) return; const url = URL.createObjectURL(fileBlob(f)); const k = fileKind(f);
@@ -1361,6 +1385,7 @@ const actions = {
   "copy-prompt": async () => { try { await navigator.clipboard.writeText(AI_PROMPT); toast("Prompt copied. Paste it into any AI with your files attached."); } catch (e) { download("ai-quiz-prompt.txt", AI_PROMPT, "text/plain"); } },
   "dl-prompt": () => download("ai-quiz-prompt.txt", AI_PROMPT, "text/plain"),
   "pick-lib": () => pickFiles("", addLibraryFiles),
+  "load-pack": () => pickFiles(isTouch ? "" : ".json,application/json", fs => fs[0] && loadLibraryPack(fs[0])),
   "open-file": ds => openFile(ds.id),
   "dl-file": async ds => { const f = await DB.get("files", ds.id); if (f) download(f.name, fileBlob(f)); },
   "del-file": async ds => { const f = await DB.get("files", ds.id); if (f && await confirmBox("Delete file?", `Remove “${esc(f.name)}” from this device?`, "Delete", true)) { await DB.del("files", ds.id); render(); } },
