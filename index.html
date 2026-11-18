@@ -170,6 +170,11 @@ footer.foot{max-width:960px;margin:0 auto;padding:0 16px 30px;font-size:.8rem;co
 .dlrow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:10px;border:1px solid var(--border);border-radius:12px}
 .dltxt{display:flex;flex-direction:column;min-width:0;flex:1 1 220px}
 .dltxt strong{overflow-wrap:anywhere}
+.fcbox{margin-top:12px;border-top:1px solid var(--border);padding-top:8px}
+.fcbox summary{cursor:pointer;font-weight:600;font-size:.92rem}
+.fclist{list-style:none;padding:0;margin:6px 0 0;display:grid;gap:6px}
+.fcrow{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.fctxt{flex:1 1 180px;min-width:0;font-size:.88rem}
 </style>
 </head>
 <body>
@@ -205,11 +210,11 @@ const BRAND = {
   byline: "by AnalyticsByShanikwa",
   url: "https://analyticsbyshanikwa.com",
   support: "hello@analyticsbyshanikwa.com",
-  version: "1.5.1",
+  version: "1.6.0",
   // Wording that changes per edition
   examLabel: "Timed exam",
   // Exam simulation: a second timed option shaped like the real test (remove this line to hide it)
-  realExam: {label: "Exam simulation", count: 40, minutes: 60, retestSecs: 90},
+  realExam: {label: "Exam simulation", count: 35, minutes: 60, retestSecs: 90},   // WGU D550 OA: 35 questions; coaching reports showed up to 60 min used
   correctMsg: "Correct!",
   courseWord: "Course",
   courseExample: "e.g., WGU D550",
@@ -352,7 +357,17 @@ function buildDeck(meta, rawQs, fallbackTitle) {
   meta = meta || {};
   return { id: uid("deck"), title: String(meta.title || fallbackTitle || "Imported deck").trim(), course: String(meta.course || "").trim(),
     description: String(meta.description || "").trim(), sources: Array.isArray(meta.sources) ? meta.sources.map(String) : meta.sources ? [String(meta.sources)] : [],
+    ...cleanStudyMeta(meta),
     questions: qs, created: Date.now(), updated: Date.now() };
+}
+// Optional deck fields from a coaching report: focus areas (each tied to a question tag), an exam blueprint
+// (topic weights used by the exam simulation), and a short report summary.
+function cleanStudyMeta(meta) {
+  const out = {};
+  if (Array.isArray(meta.focus)) out.focus = meta.focus.filter(f => f && f.tag && f.label).slice(0, 12).map(f => ({tag: String(f.tag), label: String(f.label), status: String(f.status || ""), history: String(f.history || "")}));
+  if (meta.blueprint && typeof meta.blueprint === "object") { const b = {}; Object.entries(meta.blueprint).forEach(([k, v]) => { if (+v > 0) b[String(k)] = +v; }); if (Object.keys(b).length) out.blueprint = b; }
+  if (meta.report && typeof meta.report === "object") out.report = {title: String(meta.report.title || "Coaching report"), lines: (meta.report.lines || []).map(String).slice(0, 8)};
+  return out;
 }
 function parseJSONDeck(obj, fallbackTitle) {
   if (Array.isArray(obj)) return [buildDeck({}, obj, fallbackTitle)];
@@ -432,7 +447,7 @@ function parseAny(text, filename = "") {
   return parseTextDeck(t, base);
 }
 function deckToJSON(d) {
-  return JSON.stringify({format: "studyquiz/v1", deck: {title: d.title, course: d.course, description: d.description, sources: d.sources},
+  return JSON.stringify({format: "studyquiz/v1", deck: {title: d.title, course: d.course, description: d.description, sources: d.sources, ...(d.focus ? {focus: d.focus} : {}), ...(d.blueprint ? {blueprint: d.blueprint} : {}), ...(d.report ? {report: d.report} : {})},
     questions: d.questions.map(q => { const o = {id: q.id, topic: q.topic, prompt: q.prompt, options: q.options}; if (q.answer.length > 1) o.answers = q.answer; else o.answer = q.answer[0];
       o.explanation = q.explanation; o.sources = q.sources; if (q.hint) o.hint = q.hint; if (q.tags?.length) o.tags = q.tags; return o; })}, null, 2);
 }
@@ -530,15 +545,28 @@ function renderDeckList() {
         ${BRAND.realExam ? `<button class="btn sm" data-act="setup" data-id="${d.id}" data-mode="real">${esc(BRAND.realExam.label)} <span class="muted">(${Math.min(BRAND.realExam.count, s.total)} Q · ${realMinutes(s.total)} min)</span></button>` : ""}
         <button class="btn sm" data-act="setup" data-id="${d.id}" data-mode="flash">Flashcards</button>
         <button class="btn sm green" data-act="weak" data-id="${d.id}" ${s.weak ? "" : "disabled"}>Weak spots (${s.weak})</button>
-      </div></div>`;
+      </div>${focusBlock(d)}</div>`;
   }).join("");
   return `<div class="row between" style="margin-bottom:14px"><h1>Your decks</h1>
     <div class="row"><button class="btn sm" data-act="new-deck">New blank deck</button><button class="btn sm primary" data-act="nav" data-view="import">Import</button></div></div>
     <div class="grid">${cards}</div>`;
 }
 
+/* ============ COACHING-REPORT FOCUS AREAS ============ */
+const focusClass = st => /suggested/i.test(st) ? "bad" : /review/i.test(st) ? "warn" : "";
+function focusBlock(d) {
+  if (!d.focus?.length) return "";
+  const rows = d.focus.map(f => { const n = d.questions.filter(q => (q.tags || []).includes(f.tag)).length, w = d.questions.filter(q => (q.tags || []).includes(f.tag) && isWeak(d.id, q)).length; if (!n) return "";
+    return `<li class="fcrow"><div class="fctxt"><strong>${esc(f.label)}</strong> ${f.status ? `<span class="pill ${focusClass(f.status)}">${esc(f.status)}</span>` : ""}${f.history ? `<br><span class="muted" style="font-size:.8rem">${esc(f.history)}</span>` : ""}</div>
+      <button class="btn sm" data-act="focus-drill" data-id="${d.id}" data-tag="${esc(f.tag)}" aria-label="Practice ${esc(f.label)}">Drill ${n}${w ? ` · ${w} weak` : ""}</button></li>`; }).join("");
+  if (!rows) return "";
+  return `<details class="fcbox"${d.focusOpen === false ? "" : " open"}><summary>📋 ${esc(d.report?.title || "Focus areas")}</summary>
+    ${d.report?.lines?.length ? `<p class="muted" style="font-size:.85rem;margin:6px 0">${d.report.lines.map(esc).join("<br>")}</p>` : ""}<ul class="fclist">${rows}</ul></details>`;
+}
+const tagPills = q => (q.tags || []).includes("wgu-tricky") ? `<span class="pill warn">⚡ WGU tricky</span>` : "";
+
 /* ============ SESSION SETUP ============ */
-function openSetup(deckId, mode, weakOnly = false) {
+function openSetup(deckId, mode, weakOnly = false, focusTag = "") {
   const d = S.decks.find(x => x.id === deckId); if (!d) return;
   if (!d.questions.length) { toast("This deck has no questions yet. Add some in Edit questions."); return; }
   if (mode === "real") return openRealSetup(d);
@@ -550,6 +578,7 @@ function openSetup(deckId, mode, weakOnly = false) {
       ${mode === "exam" ? `<div class="field"><label for="sMin">Time limit (minutes)</label><input id="sMin" type="number" min="1" value="${Math.ceil(n * S.settings.secPerQ / 60)}"><p class="help">Default is ${S.settings.secPerQ} seconds per question. Change it in Settings.</p></div>` : ""}
       ${topics.length > 1 ? `<fieldset class="field" style="border:0;padding:0"><legend style="font-weight:600;font-size:.9rem;margin-bottom:4px">Topics</legend>
         ${topics.map((t, i) => `<label class="check"><input type="checkbox" name="topic" value="${esc(t)}" checked> ${esc(t)} <span class="muted">(${d.questions.filter(q => q.topic === t).length})</span></label>`).join("")}</fieldset>` : ""}
+      ${d.focus?.length ? `<div class="field"><label for="sFocus">Focus area</label><select id="sFocus"><option value="">All questions</option>${d.focus.map(f => { const n = d.questions.filter(q => (q.tags || []).includes(f.tag)).length; return n ? `<option value="${esc(f.tag)}" ${focusTag === f.tag ? "selected" : ""}>${esc(f.label)}${f.status ? ` (${esc(f.status)})` : ""}: ${n}</option>` : ""; }).join("")}</select></div>` : ""}
       <label class="check"><input type="checkbox" id="sWeak" ${weakOnly ? "checked" : ""}> Only weak spots (questions you last missed or miss more often than you get right)</label>
       <label class="check"><input type="checkbox" id="sShufQ" ${S.settings.shuffleQ ? "checked" : ""}> Shuffle question order</label>
       <label class="check"><input type="checkbox" id="sShufO" ${S.settings.shuffleOpts ? "checked" : ""}> Shuffle answer choices <span class="muted">(explanations that mention letters may not match)</span></label>
@@ -561,6 +590,7 @@ function startSession(form) {
   const topics = [...form.querySelectorAll("input[name=topic]")].filter(c => c.checked).map(c => c.value);
   let qs = d.questions.filter(q => !topics.length || form.querySelectorAll("input[name=topic]").length === 0 || topics.includes(q.topic));
   if ($("#sWeak").checked) qs = qs.filter(q => isWeak(d.id, q));
+  const ft = $("#sFocus")?.value; if (ft) qs = qs.filter(q => (q.tags || []).includes(ft));
   if (!qs.length) { toast("No questions match those filters.", true); return; }
   if ($("#sShufQ").checked) qs = shuffle(qs);
   const count = Math.max(1, Math.min(qs.length, +$("#sCount").value || qs.length)); qs = qs.slice(0, count);
@@ -573,16 +603,19 @@ function startSession(form) {
 }
 
 /* ============ EXAM SIMULATION (like the real test) ============ */
-// Up to 40 questions in 60 minutes. Smaller decks keep the same pace (90 seconds a question).
+// Up to 35 questions in 60 minutes (like the D550 OA). Smaller decks keep the same pace.
 const realMinutes = n => { const R = BRAND.realExam; return n >= R.count ? R.minutes : Math.max(1, Math.round(R.minutes * n / R.count)); };
 // Draw from every topic in proportion to its share of the deck (largest-remainder rounding), then shuffle.
-function balancedDraw(qs, k) {
+// With a blueprint ({topic: weight}, e.g., the OA's 60% / 40% split), topics are drawn by those weights instead.
+function balancedDraw(qs, k, blueprint) {
   if (qs.length <= k) return shuffle(qs);
   const groups = {}; qs.forEach(q => (groups[q.topic] ||= []).push(q));
-  const quota = Object.keys(groups).map(t => { const exact = groups[t].length * k / qs.length; return {t, exact, n: Math.floor(exact)}; });
+  const bw = blueprint && Object.keys(groups).some(t => blueprint[t]) ? blueprint : null;
+  const wsum = Object.keys(groups).reduce((a, t) => a + (bw ? (bw[t] || 0) : groups[t].length), 0);
+  const quota = Object.keys(groups).map(t => { const exact = (bw ? (bw[t] || 0) : groups[t].length) * k / wsum; return {t, exact, n: Math.min(groups[t].length, Math.floor(exact))}; });
   let left = k - quota.reduce((a, x) => a + x.n, 0);
   quota.sort((a, b) => (b.exact - b.n) - (a.exact - a.n) || Math.random() - .5);
-  for (let i = 0; left > 0; i++, left--) quota[i % quota.length].n++;
+  for (let guard = 0; left > 0 && guard < 10000; guard++) { const x = quota[guard % quota.length]; if (x.n < groups[x.t].length) { x.n++; left--; } }   // a topic that runs short passes its seats on
   return shuffle(quota.flatMap(x => shuffle(groups[x.t]).slice(0, x.n)));
 }
 function openRealSetup(d) {
@@ -590,7 +623,7 @@ function openRealSetup(d) {
   openModal(`<h2>${esc(R.label)}: ${esc(d.title)}</h2>
     <p><strong>${cnt} questions · ${mins} minutes</strong>, set up like the real exam.</p>
     <ul class="help" style="padding-left:20px;line-height:1.6">
-      <li>Questions come from ${topics > 1 ? `all ${topics} topics in proportion` : "the whole deck"}, in random order.</li>
+      <li>${d.blueprint ? `Topics are weighted like the real exam's blueprint: ${Object.entries(d.blueprint).map(([t, w]) => `${esc(t)} ${Math.round(w * 100)}%`).join(", ")}.` : `Questions come from ${topics > 1 ? `all ${topics} topics in proportion` : "the whole deck"}`}, in random order.</li>
       <li>No hints, explanations, or right/wrong marks until you submit.</li>
       <li>Flag questions and jump between them with <strong>Questions</strong>. Unanswered questions count as wrong. At 0:00 the exam submits itself.</li>
       <li>Afterward you get your grade, a topic breakdown, every explanation and source, and a timed retest of what you missed.</li></ul>
@@ -629,7 +662,7 @@ function renderSession() {
     : `<div class="row between"><div><strong>${esc(s.deckTitle)}</strong><div class="muted" style="font-size:.85rem">Practice · instant feedback</div></div><button class="btn sm" data-act="end-practice">Finish</button></div>`;
   return `<div class="card">${top}
     <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct(s.i + 1, s.qs.length)}" aria-label="Progress" style="margin-top:12px"><i style="width:${pct(s.i + 1, s.qs.length)}%"></i></div>
-    <div class="q-meta"><span class="pill">Question ${s.i + 1} of ${s.qs.length}</span>${s.real ? "" : `<span class="pill">${esc(q.topic)}</span>`}${multi ? `<span class="pill warn">Select ${q.answer.length}</span>` : ""}${!s.real && (q.tags || []).includes("weak-spot") ? `<span class="pill bad">★ weak spot</span>` : ""}
+    <div class="q-meta"><span class="pill">Question ${s.i + 1} of ${s.qs.length}</span>${s.real ? "" : `<span class="pill">${esc(q.topic)}</span>`}${multi ? `<span class="pill warn">Select ${q.answer.length}</span>` : ""}${!s.real && (q.tags || []).includes("weak-spot") ? `<span class="pill bad">★ weak spot</span>` : ""}${!s.real ? tagPills(q) : ""}
       ${canSpeak ? `<button class="btn sm ghost" data-act="speak" aria-label="Read question aloud">🔊 Read aloud</button>` : ""}
       ${s.mode === "exam" ? `<button class="btn sm ghost" data-act="flag" aria-pressed="${!!s.flags[q.id]}">${s.flags[q.id] ? "⚑ Flagged" : "⚐ Flag"}</button>` : ""}</div>
     <div class="q-prompt">${esc(q.prompt)}</div>
@@ -1286,6 +1319,7 @@ const actions = {
   "menu": (ds, el) => { const l = el.nextElementSibling; const open = l.classList.contains("hide"); document.querySelectorAll(".menu-list").forEach(m => m.classList.add("hide")); document.querySelectorAll("[data-act=menu]").forEach(b => b.setAttribute("aria-expanded", "false")); if (open) { l.classList.remove("hide"); el.setAttribute("aria-expanded", "true"); l.querySelector("button")?.focus(); } },
   "load-sample": async () => { await importDecks(parseJSONDeck(SAMPLE), "sample"); },
   "setup": ds => openSetup(ds.id, ds.mode),
+  "focus-drill": ds => openSetup(ds.id, "practice", false, ds.tag),
   "weak": ds => { const d = S.decks.find(x => x.id === ds.id); if (d && !d.questions.some(q => isWeak(d.id, q))) { toast("No weak spots right now. Keep practicing!"); return; } openSetup(ds.id, "practice", true); },
   "pick": ds => pick(ds.opt),
   "check": () => checkAnswer(),
@@ -1298,7 +1332,7 @@ const actions = {
   "exam-grid": () => examGrid(),
   "goto": ds => { closeModal(); S.session.i = +ds.i; render(); },
   "submit-exam": () => submitExam(),
-  "start-real": ds => { const d = S.decks.find(x => x.id === ds.id); if (d) startReal(d, balancedDraw(d.questions, BRAND.realExam.count), realMinutes(d.questions.length) * 60, false); },
+  "start-real": ds => { const d = S.decks.find(x => x.id === ds.id); if (d) startReal(d, balancedDraw(d.questions, BRAND.realExam.count, d.blueprint), realMinutes(d.questions.length) * 60, false); },
   "retest-missed": () => { const r = S.lastResult, d = S.decks.find(x => x.id === r?.deckId); if (!d) return; const qs = shuffle(r.items.filter(it => !it.ok).map(it => it.q)); if (qs.length) startReal(d, qs, qs.length * BRAND.realExam.retestSecs, true); },
   "end-practice": () => finishSession(),
   "rfilter": ds => { S.lastResult.filter = ds.f; render(); },

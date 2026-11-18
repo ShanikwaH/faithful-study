@@ -153,13 +153,24 @@ Plan any course day by day until your exam, with any decks you have now or add l
 - **⬇ Checklist (.md)**, **⬇ Calendar (.ics)** (open it on iPhone, then tap Add All), and **🔗 Copy link / 📤 Share**: paste the link into Import › 📋 Paste & import on another device.
 - **From an AI:** **Copy the AI prompt** (Plan tab). Or with Claude, use the `study-plan-builder` skill in `tools/skills/study-plan-builder/SKILL.md`, which also makes the checklist and calendar file. Paste the `studyplan/v1` reply into Import. You can keep several plans, one for each course.
 
+## Coaching-report focus areas and WGU's tricky keys
+
+- **Focus areas:** a deck can carry the topics from a WGU coaching report. Each D550 deck shows a **📋 OA coaching report (Attempts 1–2)** box listing:
+  - **Auditor's Defense**, **Auditors' Statutory Legal Liability**, and **Apply the rules of AICPA**, marked *Suggested Study Review*
+  - **Corporate Governance**, marked *Review*
+  - **WGU's tricky keys**
+- **Drilling an area:** tap **Drill** on any area to practice only those questions. Its weak-spot count shows next to it. The Practice and Timed exam setup screens also have a **Focus area** menu.
+- **⚡ WGU tricky:** this tag marks answers WGU keyed against first instinct (from your passed Pre-Assessment, Attempt 2). The explanations teach WGU's answer and add a short "Textbook vs. current law" note where the real rule differs.
+- **Exam simulation:** now **35 questions in 60 minutes**, like the D550 OA. In a deck with a blueprint, topics are weighted like the OA: Code of Conduct and Ethical Practice 60% (Ch. 3 at 30% and Ch. 4 at 30%), Legal Liabilities 40% (Ch. 8). A topic with too few questions passes its seats to the others.
+- **For deck makers:** add `focus` (`[{tag, label, status, history}]`), `blueprint` (`{topic: weight}`), and `report` (`{title, lines}`) to the `deck` object, and tag the questions to match.
+
 ## Study modes
 
 **🔊 Read aloud:** every question, explanation, and flashcard can be read out loud by the device's built-in voice. It works offline on most phones, tablets, and computers.
 
 - **Practice:** Instant feedback with the explanation and sources after every answer. Hints are available where the deck has them.
 - **Timed exam:** Mimics the real test. It has a countdown (default 90 seconds per question), a question grid, and flags. You get no feedback until you submit. Results include your score against your target, a breakdown by topic, and a full review filtered by All, Missed, or Flagged.
-- **Exam simulation (40 questions · 60 minutes):** Set up like the real exam. Questions are drawn from every topic in proportion to the deck, in random order. Topic labels, weak-spot tags, hints, and explanations stay hidden until you submit, and the exam submits itself at 0:00. Afterward you get your grade, a topic breakdown, every explanation, hint, and source, and **Retest what I missed**: a new timed exam of only the questions you got wrong (90 seconds each), under the same rules. Decks with fewer than 40 questions keep the same pace. To change the count or time, edit `realExam` in the `BRAND` block.
+- **Exam simulation (35 questions · 60 minutes):** Set up like the real exam. Questions are drawn from every topic in proportion to the deck, in random order. Topic labels, weak-spot tags, hints, and explanations stay hidden until you submit, and the exam submits itself at 0:00. Afterward you get your grade, a topic breakdown, every explanation, hint, and source, and **Retest what I missed**: a new timed exam of only the questions you got wrong (90 seconds each), under the same rules. Decks with fewer than 35 questions keep the same pace. To change the count or time, edit `realExam` in the `BRAND` block.
 - **Flashcards:** Tap or press Space to flip. Rate each card **Again** (1) or **Got it** (2).
 - **Weak spots:** Drills only the questions you last missed, or miss more often than you get right.
 - **Filters:** Every mode can filter by topic, limit the question count, and shuffle.

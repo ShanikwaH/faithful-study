@@ -134,7 +134,7 @@
   function startItem(p, x) {
     const d = deckByTitle(x.deck); if (!d) { toast("Add this deck first on the Import tab.", true); return; }
     let qs = d.questions, mode = "practice";
-    if (x.type === "examsim" && BRAND.realExam) { startReal(d, balancedDraw(d.questions, BRAND.realExam.count), realMinutes(d.questions.length) * 60, false); S.session.planItem = {plan: p.id, item: x.id}; render(); return; }
+    if (x.type === "examsim" && BRAND.realExam) { startReal(d, balancedDraw(d.questions, BRAND.realExam.count, d.blueprint), realMinutes(d.questions.length) * 60, false); S.session.planItem = {plan: p.id, item: x.id}; render(); return; }
     if (x.type === "flash") mode = "flash";
     if (x.type === "practice" && x.topic) qs = qs.filter(q => q.topic === x.topic);
     if (x.type === "weak") { const w = qs.filter(q => isWeak(d.id, q)); qs = w.length ? w : qs; }
